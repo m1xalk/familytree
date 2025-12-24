@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>Семейное дерево</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    .person { border: 1px solid #ccc; padding: 10px; margin: 10px; border-radius: 8px; }
+    img { width: 80px; height: 80px; object-fit: cover; border-radius: 6px; }
+  </style>
+</head>
+<body>
+  <h1>Семейное дерево</h1>
+  <div id="tree"></div>
+
+  <script>
+    fetch('data.json')
+      .then(r => r.json())
+      .then(data => {
+        const root = document.getElementById('tree');
+        data.people.forEach(p => {
+          const div = document.createElement('div');
+          div.className = 'person';
+          div.innerHTML = `
+            ${p.photo ? `<img src="${p.photo}">` : ''}
+            <strong>${p.lastName} ${p.firstName}</strong><br>
+            ${p.gender === 'M' ? 'М' : 'Ж'}<br>
+            ${p.birth || ''} ${p.death ? '– ' + p.death : ''}
+          `;
+          root.appendChild(div);
+        });
+      });
+  </script>
+</body>
+</html>
