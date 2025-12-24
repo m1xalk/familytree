@@ -1,35 +1,102 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8" />
-  <title>Семейное дерево</title>
-  <style>
-    body { font-family: Arial, sans-serif; padding: 20px; }
-    .person { border: 1px solid #ccc; padding: 10px; margin: 10px; border-radius: 8px; }
-    img { width: 80px; height: 80px; object-fit: cover; border-radius: 6px; }
-  </style>
+<meta charset="UTF-8">
+<title>Админка — Семейное дерево</title>
+<style>
+body {
+  font-family: sans-serif;
+  max-width: 800px;
+  margin: 40px auto;
+}
+#editor { display: none; }
+textarea { width: 100%; height: 400px; }
+input { margin: 5px 0; padding: 5px; width: 100%; }
+button { padding: 8px 16px; margin-top: 8px; cursor: pointer; }
+</style>
 </head>
 <body>
-  <h1>Семейное дерево</h1>
-  <div id="tree"></div>
 
-  <script>
-    fetch('data.json')
-      .then(r => r.json())
-      .then(data => {
-        const root = document.getElementById('tree');
-        data.people.forEach(p => {
-          const div = document.createElement('div');
-          div.className = 'person';
-          div.innerHTML = `
-            ${p.photo ? `<img src="${p.photo}">` : ''}
-            <strong>${p.lastName} ${p.firstName}</strong><br>
-            ${p.gender === 'M' ? 'М' : 'Ж'}<br>
-            ${p.birth || ''} ${p.death ? '– ' + p.death : ''}
-          `;
-          root.appendChild(div);
-        });
-      });
-  </script>
+<h2>Админка — Семейное дерево</h2>
+
+<div id="login">
+  <p>Введите пароль администратора:</p>
+  <input type="password" id="password" placeholder="Пароль">
+  <button onclick="login()">Войти</button>
+</div>
+
+<div id="editor">
+  <h3>Редактирование файла data.json</h3>
+  <label>GitHub Token:</label>
+  <input id="token" placeholder="github_pat_..." />
+  <textarea id="json"></textarea>
+  <button onclick="save()">💾 Сохранить в GitHub</button>
+</div>
+
+<script>
+const PASSWORD_HASH = "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918"; // hash от "admin"
+const OWNER = "m1zalk";
+const REPO = "familytree";
+const FILE_PATH = "data.json";
+
+async function sha256(str) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function login() {
+  const pass = document.getElementById('password').value;
+  if (await sha256(pass) !== PASSWORD_HASH) {
+    alert("Неверный пароль");
+    return;
+  }
+  document.getElementById('login').style.display = 'none';
+  document.getElementById('editor').style.display = 'block';
+  const saved = localStorage.getItem('gh_token');
+  if (saved) document.getElementById('token').value = saved;
+  const jsonText = await fetch(FILE_PATH, { cache: "no-store" }).then(r => r.text());
+  document.getElementById('json').value = jsonText;
+}
+
+async function getFileSha(token) {
+  const url = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${FILE_PATH}`;
+  const res = await fetch(url, {
+    headers: { "Authorization": "Bearer " + token }
+  });
+  const data = await res.json();
+  return data.sha;
+}
+
+async function save() {
+  try {
+    const token = document.getElementById('token').value.trim();
+    if (!token) { alert("Вставь GitHub token"); return; }
+    localStorage.setItem('gh_token', token);
+    const raw = document.getElementById('json').value;
+    JSON.parse(raw);
+    const sha = await getFileSha(token);
+    const content = btoa(unescape(encodeURIComponent(raw)));
+    const url = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${FILE_PATH}`;
+    const res = await fetch(url, {
+      method: "PUT",
+      headers: {
+        "Authorization": "Bearer " + token,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        message: "update data.json",
+        content,
+        sha
+      })
+    });
+    if (!res.ok) throw new Error(await res.text());
+    alert("✅ Сохранено в GitHub! Через 30 секунд обновится сайт.");
+  } catch (e) {
+    alert("Ошибка: " + e.message);
+  }
+}
+</script>
 </body>
 </html>
+
+
