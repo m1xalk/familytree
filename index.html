@@ -996,19 +996,41 @@
             ) : (
               // Обычная пара - показываем обоих
               <div className="coupleRow">
-                <PersonCardMini person={p1} onClick={() => p1 && onSelectPerson(p1.id)} />
-                
-                <div
-                  className="coupleMid"
-                  title={isAdmin ? "Добавить ребёнка" : "Только админ может менять дерево"}
-                  aria-disabled={!isAdmin}
-                  onClick={() => isAdmin && onOpenAddChild(couple.id)}
-                >
-                  {statusIcon}
-                </div>
-                
-                <PersonCardMini person={p2} onClick={() => p2 && onSelectPerson(p2.id)} />
-              </div>
+              {(() => {
+                const hideLeft = focusPersonId && p1?.id === focusPersonId;
+                const hideRight = focusPersonId && p2?.id === focusPersonId;
+
+                const Placeholder = () => (
+                  <div className="personCard" style={{ visibility: "hidden" }}>
+                    <div className="avatar">__</div>
+                    <div className="text-left min-w-0">
+                      <div className="font-semibold text-slate-900 truncate">__</div>
+                      <div className="text-xs text-slate-500 truncate">__</div>
+                      <div className="text-xs text-slate-600 flex items-center gap-2">
+                        <span>__</span><span>__</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+
+                return (
+                  <>
+                    {hideLeft ? <Placeholder /> : <PersonCardMini person={p1} onClick={() => p1 && onSelectPerson(p1.id)} />}
+
+                    <div
+                      className="coupleMid"
+                      title={isAdmin ? "Добавить ребёнка" : "Только админ может менять дерево"}
+                      aria-disabled={!isAdmin}
+                      onClick={() => isAdmin && onOpenAddChild(couple.id)}
+                    >
+                      {statusIcon}
+                    </div>
+
+                    {hideRight ? <Placeholder /> : <PersonCardMini person={p2} onClick={() => p2 && onSelectPerson(p2.id)} />}
+                  </>
+                );
+              })()}
+            </div>
             )}
 
             <div className="mt-2 flex items-center justify-center gap-2">
@@ -1096,6 +1118,7 @@
                     onDetachChild={onDetachChild}
                     depth={depth + 1}
                     path={new Set([...path, person.id])}
+                    focusPersonId={person.id}
                   />
                 </div>
               ))}
