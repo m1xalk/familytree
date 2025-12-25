@@ -977,6 +977,18 @@ function TreePersonNode({
     }) {
       const personCouples = (couplesByPerson.get(person.id) || []);
 
+      // Защита от циклов в данных: если человек уже встречался по пути, не углубляемся дальше
+      if (path && path.has(person.id)) {
+        return (
+          <li>
+            <div className="flex flex-col items-center gap-2">
+              <PersonCardMini person={person} onClick={() => onSelectPerson(person.id)} />
+              <div className="text-[11px] text-slate-400">Цикл в данных — ветка остановлена</div>
+            </div>
+          </li>
+        );
+      }
+
       const nextPath = new Set(path);
       nextPath.add(person.id);
 
