@@ -511,6 +511,7 @@ function App(){
     const payload = { ...personForm, id, firstName, lastName, gender };
     await fsSetPeoplePerson(payload);
     setSelectedPersonId(id);
+    setPersonForm(payload);
     setToast(personForm.id ? "Человек обновлён" : "Человек добавлен");
   }
   async function deletePerson(id){
@@ -719,7 +720,14 @@ function App(){
                     <div className="mt-3 flex gap-2">
                       <Btn variant="ok" onClick={savePerson}>Сохранить</Btn>
                       <Btn variant="ghost" onClick={startCreatePerson}>Очистить</Btn>
-                      {personForm.id && <Btn variant="danger" onClick={()=>deletePerson(personForm.id)}>Удалить</Btn>}
+                      {personForm.id ? (
+  <Btn variant="danger" onClick={()=>deletePerson(personForm.id)}>Удалить</Btn>
+) : (
+  <Btn variant="ghost" onClick={()=>setToast("Чтобы удалить — сначала выбери человека или нажми «В форму: выбранного»")}>
+    Удалить
+  </Btn>
+)}
+
                     </div>
                   </Card>
 
@@ -895,3 +903,4 @@ ReactDOM.createRoot(document.getElementById("root")).render(<App />);
 </script>
 </body>
 </html>
+
