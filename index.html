@@ -1,4 +1,4 @@
-<! DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
@@ -15,7 +15,7 @@
 
   <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js"></script>
 
   <style>
@@ -49,7 +49,7 @@
     }
 
     /* одиночный ребенок */
-    .tree li:only-child::before,
+    .tree li: only-child::before,
     .tree li:only-child::after { display: none; }
     .tree li:only-child { padding-top: 0; }
 
@@ -139,7 +139,7 @@
       border-left: 2px solid #cbd5e1;
     }
 
-    . clearfix::after { content: ""; display: table; clear: both; }
+    . clearfix:: after { content: ""; display: table; clear: both; }
   </style>
 </head>
 
@@ -152,20 +152,18 @@
     // =========================
     // FIREBASE CONFIG
     // =========================
-    // ЗАМЕНИ НА СВОИ ЗНАЧЕНИЯ из Firebase Console
     const firebaseConfig = {
-      apiKey: "YOUR_API_KEY",
-      authDomain: "your-project.firebaseapp.com",
-      databaseURL: "https://your-project-default-rtdb.firebaseio.com",
-      projectId: "your-project",
-      storageBucket: "your-project.appspot.com",
-      messagingSenderId: "123456789",
-      appId:  "1:123456789:web:abc123def456"
+      apiKey: "AIzaSyDJKvh7T9MJGXHWoA3LsESEXWsQxiIbFd4",
+      authDomain: "familytree-ee339.firebaseapp.com",
+      projectId: "familytree-ee339",
+      storageBucket: "familytree-ee339.firebasestorage.app",
+      messagingSenderId:  "986703703890",
+      appId: "1:986703703890:web: 71ea30a750e7867dd1548b"
     };
 
     // Initialize Firebase
     firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();
+    const db = firebase.firestore();
     const auth = firebase.auth();
 
     // =========================
@@ -201,7 +199,7 @@
       const [password, setPassword] = useState("");
       const [email, setEmail] = useState("");
 
-      // data from firebase
+      // data from firestore
       const [people, setPeople] = useState([]);
       const [couples, setCouples] = useState([]);
       const [comments, setComments] = useState([]);
@@ -223,18 +221,21 @@
       // Firebase Auth Listener
       // -------------------------
       useEffect(() => {
-        const unsubscribe = auth. onAuthStateChanged((currentUser) => {
+        const unsubscribe = auth.onAuthStateChanged(async (currentUser) => {
           setUser(currentUser);
           setLoading(false);
 
           if (currentUser) {
             // Проверяем админский статус
-            db.ref(`admins/${currentUser.uid}`).once("value", (snap) => {
-              setIsAdmin(!! snap.val());
-            });
+            try {
+              const adminDoc = await db.collection("admins").doc(currentUser.uid).get();
+              setIsAdmin(adminDoc.exists);
+            } catch (err) {
+              setIsAdmin(false);
+            }
 
-            // Загружаем данные из Firebase
-            loadDataFromFirebase();
+            // Загружаем данные из Firestore
+            loadDataFromFirestore();
           }
         });
 
@@ -242,22 +243,25 @@
       }, []);
 
       // -------------------------
-      // Load Data from Firebase
+      // Load Data from Firestore
       // -------------------------
-      const loadDataFromFirebase = () => {
-        db.ref("people").on("value", (snap) => {
-          const data = snap.val() || {};
-          setPeople(Object.entries(data).map(([id, val]) => ({ id, ...val })));
+      const loadDataFromFirestore = () => {
+        // Загрузка people
+        db.collection("people").onSnapshot((snapshot) => {
+          const data = snapshot.docs.map(doc => ({ id: doc.id, ... doc.data() }));
+          setPeople(data);
         });
 
-        db.ref("couples").on("value", (snap) => {
-          const data = snap.val() || {};
-          setCouples(Object. entries(data).map(([id, val]) => ({ id, ...val })));
+        // Загрузка couples
+        db.collection("couples").onSnapshot((snapshot) => {
+          const data = snapshot. docs.map(doc => ({ id: doc.id, ...doc. data() }));
+          setCouples(data);
         });
 
-        db.ref("comments").on("value", (snap) => {
-          const data = snap.val() || {};
-          setComments(Object.entries(data).map(([id, val]) => ({ id, ...val })));
+        // Загрузка comments
+        db.collection("comments").onSnapshot((snapshot) => {
+          const data = snapshot.docs. map(doc => ({ id: doc.id, ...doc.data() }));
+          setComments(data);
         });
       };
 
@@ -267,18 +271,17 @@
       const handleAdminLogin = async () => {
         try {
           await auth.signInWithEmailAndPassword(email, password);
-          // Статус админа проверяется в onAuthStateChanged
           setShowLogin(false);
           setEmail("");
           setPassword("");
         } catch (err) {
-          alert("Ошибка входа:  " + err.message);
+          alert("Ошибка входа: " + err.message);
         }
       };
 
       const handleGuestLogin = async () => {
         try {
-          const result = await auth.signInAnonymously();
+          await auth.signInAnonymously();
           setShowLogin(false);
           setEmail("");
           setPassword("");
@@ -288,7 +291,7 @@
       };
 
       const handleLogout = async () => {
-        await auth. signOut();
+        await auth.signOut();
         setIsAdmin(false);
       };
 
@@ -301,21 +304,21 @@
         const p = {
           firstName: data.firstName || "",
           lastName: data.lastName || "",
-          middleName:  data.middleName || "",
+          middleName: data.middleName || "",
           gender: data.gender || "M",
-          birthDate: data.birthDate || "",
+          birthDate: data. birthDate || "",
           deathDate: data.deathDate || "",
           description: data.description || "",
           mainPhoto: data.mainPhoto || "",
           photos: data.mainPhoto ? [data.mainPhoto] : [],
         };
-        await db.ref(`people/${newId}`).set(p);
+        await db.collection("people").doc(newId).set(p);
         setShowPersonForm(false);
       };
 
       const updatePerson = async (data) => {
         if (!isAdmin) return;
-        await db.ref(`people/${data.id}`).update({
+        await db.collection("people").doc(data.id).update({
           firstName: data.firstName,
           lastName: data.lastName,
           middleName: data. middleName,
@@ -333,30 +336,27 @@
 
       const deletePerson = async (personId) => {
         if (!isAdmin) return;
-        if (! confirm("Удалить человека?  Связи и комментарии будут очищены. ")) return;
+        if (! confirm("Удалить человека?  Связи и комментарии будут очищены.")) return;
 
-        await db.ref(`people/${personId}`).remove();
+        await db.collection("people").doc(personId).delete();
 
         // очищаем пары
-        const couplesSnap = await db.ref("couples").once("value");
-        const couplesData = couplesSnap.val() || {};
-        for (const [coupleId, couple] of Object.entries(couplesData)) {
+        const couplesSnap = await db.collection("couples").get();
+        for (const coupleDoc of couplesSnap.docs) {
+          const couple = coupleDoc.data();
           if (couple.partner1Id === personId || couple.partner2Id === personId) {
-            await db.ref(`couples/${coupleId}`).remove();
+            await db.collection("couples").doc(coupleDoc.id).delete();
           } else if (couple.childrenIds?. includes(personId)) {
-            await db.ref(`couples/${coupleId}/childrenIds`).set(
-              couple.childrenIds.filter(id => id !== personId)
-            );
+            await db.collection("couples").doc(coupleDoc.id).update({
+              childrenIds: couple.childrenIds.filter(id => id !== personId)
+            });
           }
         }
 
         // очищаем комментарии
-        const commentsSnap = await db.ref("comments").once("value");
-        const commentsData = commentsSnap.val() || {};
-        for (const [commentId, comment] of Object.entries(commentsData)) {
-          if (comment. personId === personId) {
-            await db.ref(`comments/${commentId}`).remove();
-          }
+        const commentsSnap = await db.collection("comments").where("personId", "==", personId).get();
+        for (const commentDoc of commentsSnap.docs) {
+          await db.collection("comments").doc(commentDoc.id).delete();
         }
 
         if (selectedPersonId === personId) setSelectedPersonId(null);
@@ -374,7 +374,7 @@
           status: data.status,
           childrenIds: [],
         };
-        await db. ref(`couples/${newId}`).set(c);
+        await db. collection("couples").doc(newId).set(c);
         setShowCoupleForm(false);
         setExpanded(prev => new Set([...prev, data.partner1Id, data.partner2Id, newId]));
       };
@@ -382,12 +382,12 @@
       const deleteCouple = async (coupleId) => {
         if (!isAdmin) return;
         if (! confirm("Удалить пару? Дети останутся как люди.")) return;
-        await db.ref(`couples/${coupleId}`).remove();
+        await db.collection("couples").doc(coupleId).delete();
       };
 
       const updateCoupleChildren = async (coupleId, childrenIds) => {
         if (!isAdmin) return;
-        await db.ref(`couples/${coupleId}/childrenIds`).set(childrenIds);
+        await db.collection("couples").doc(coupleId).update({ childrenIds });
       };
 
       // -------------------------
@@ -399,9 +399,9 @@
         if (!text) return;
 
         const newId = uid();
-        await db.ref(`comments/${newId}`).set({
+        await db.collection("comments").doc(newId).set({
           personId: selectedPerson.id,
-          author: isAdmin ? "Администратор" : (user.email || "Гость"),
+          author: isAdmin ? "Администратор" : (user. email || "Гость"),
           text,
           date: new Date().toISOString(),
           userId: user.uid
@@ -412,7 +412,7 @@
 
       const deleteComment = async (commentId) => {
         if (!isAdmin) return;
-        await db.ref(`comments/${commentId}`).remove();
+        await db.collection("comments").doc(commentId).delete();
       };
 
       // -------------------------
@@ -424,8 +424,8 @@
         reader.onloadend = async () => {
           const dataUrl = String(reader.result || "");
           const person = people.find(p => p.id === personId);
-          const nextPhotos = [... (person?. photos || []), dataUrl];
-          await db.ref(`people/${personId}/photos`).set(nextPhotos);
+          const nextPhotos = [... (person?.photos || []), dataUrl];
+          await db.collection("people").doc(personId).update({ photos: nextPhotos });
           setSelectedPersonId(personId);
         };
         reader.readAsDataURL(file);
@@ -435,7 +435,7 @@
         if (!isAdmin) return;
         const person = people.find(p => p.id === personId);
         const next = (person?.photos || []).filter((_, i) => i !== index);
-        await db.ref(`people/${personId}/photos`).set(next);
+        await db.collection("people").doc(personId).update({ photos: next });
       };
 
       // -------------------------
@@ -451,7 +451,7 @@
         const roots = couples.filter(c =>
           ! personIsChild.has(c.partner1Id) && !personIsChild.has(c.partner2Id)
         );
-        return roots.length ?  roots : couples;
+        return roots. length ?  roots : couples;
       }, [couples, personIsChild]);
 
       const couplesByPerson = useMemo(() => {
@@ -460,7 +460,7 @@
           if (!map.has(c.partner1Id)) map.set(c.partner1Id, []);
           if (!map.has(c.partner2Id)) map.set(c.partner2Id, []);
           map.get(c.partner1Id).push(c);
-          map.get(c. partner2Id).push(c);
+          map.get(c.partner2Id).push(c);
         }
         return map;
       }, [couples]);
@@ -494,27 +494,27 @@
           deathDate: childData.deathDate || "",
           description:  childData.description || "",
           mainPhoto: childData.mainPhoto || "",
-          photos: childData.mainPhoto ? [childData. mainPhoto] : [],
+          photos: childData.mainPhoto ? [childData.mainPhoto] : [],
         };
 
         const childId = uid();
-        await db.ref(`people/${childId}`).set(child);
+        await db.collection("people").doc(childId).set(child);
 
         const couple = couples.find(c => c.id === coupleId);
-        await db.ref(`couples/${coupleId}/childrenIds`).set(
-          [... new Set([.. .(couple?.childrenIds || []), childId])]
-        );
+        await db.collection("couples").doc(coupleId).update({
+          childrenIds: [... new Set([.. .(couple?.childrenIds || []), childId])]
+        });
 
-        setExpanded(prev => new Set([...prev, coupleId]));
+        setExpanded(prev => new Set([... prev, coupleId]));
         closeAddChild();
       };
 
       const attachExistingChild = async (coupleId, childId) => {
         if (!isAdmin) return;
         const couple = couples.find(c => c.id === coupleId);
-        await db.ref(`couples/${coupleId}/childrenIds`).set(
-          [...new Set([.. .(couple?.childrenIds || []), childId])]
-        );
+        await db.collection("couples").doc(coupleId).update({
+          childrenIds: [...new Set([...(couple?.childrenIds || []), childId])]
+        });
         setExpanded(prev => new Set([...prev, coupleId]));
         closeAddChild();
       };
@@ -587,7 +587,7 @@
                 </div>
 
                 <div className="text-xs text-slate-500 mt-3">
-                  Настройте Firebase Authentication и установите админский флаг в базе данных:  admins/[uid] = true
+                  Используй свои учетные данные из Firebase Authentication
                 </div>
 
                 <div className="mt-4 flex gap-2">
@@ -619,18 +619,18 @@
                 <div>
                   <div className="text-xl font-semibold text-slate-900">Родословное дерево</div>
                   <div className="text-xs text-slate-500">
-                    {isAdmin ? "Админ" : "Гость"} • Firebase Realtime Database
+                    {isAdmin ? "Админ" : "Гость"} • Cloud Firestore
                   </div>
                 </div>
               </div>
 
               <div className="flex items-center gap-2">
                 <div className="text-sm text-slate-600">
-                  {isAdmin ? "👤 Администратор" : "👁️ Гость"} • {user.email || "Анонимно"}
+                  {isAdmin ? "👤 Администратор" : "👁️ Гость"} • {user. email || "Анонимно"}
                 </div>
                 <button
                   onClick={handleLogout}
-                  className="px-3 py-2 rounded-lg bg-rose-600 text-white hover: bg-rose-700"
+                  className="px-3 py-2 rounded-lg bg-rose-600 text-white hover:bg-rose-700"
                 >
                   Выход
                 </button>
@@ -670,13 +670,13 @@
                 </div>
               </div>
 
-              {people.length === 0 ? (
+              {people.length === 0 ?  (
                 <div className="p-6 text-slate-600">
-                  Пока пусто.  {isAdmin && "Добавьте людей и пары. "}
+                  Пока пусто.  {isAdmin && "Добавьте людей и пары.  "}
                 </div>
               ) : couples.length === 0 ? (
                 <div className="p-6 text-slate-600">
-                  Есть люди, но нет пар. {isAdmin && "Добавьте пару, чтобы построить дерево."}
+                  Есть люди, но нет пар. {isAdmin && "Добавьте пару, чтобы построить дерево. "}
                 </div>
               ) : (
                 <div className="tree">
@@ -806,7 +806,7 @@
             )}
           </div>
 
-          {children. length > 0 && isExpanded && (
+          {children.length > 0 && isExpanded && (
             <ul className="clearfix">
               {children.map(ch => (
                 <TreePersonDescNode
@@ -892,7 +892,7 @@
       return (
         <div className="personCard" onClick={onClick} title="Открыть карточку">
           {person.mainPhoto ?  (
-            <img className="avatar" src={person. mainPhoto} alt="Фото" />
+            <img className="avatar" src={person.mainPhoto} alt="Фото" />
           ) : (
             <div className="avatar">{initials}</div>
           )}
@@ -902,7 +902,7 @@
             <div className="text-xs text-slate-500 truncate">{person.middleName || " "}</div>
             <div className="text-xs text-slate-600 flex items-center gap-2">
               <span>{genderIcon}</span>
-              <span>{yearRange(person.birthDate, person.deathDate)}</span>
+              <span>{yearRange(person.birthDate, person. deathDate)}</span>
             </div>
           </div>
         </div>
@@ -917,7 +917,7 @@
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-lg p-5 shadow-xl">
             <div className="flex justify-end">
-              <button onClick={onClose} className="px-3 py-1 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm">
+              <button onClick={onClose} className="px-3 py-1 rounded-lg bg-slate-200 hover: bg-slate-300 text-slate-800 text-sm">
                 Закрыть
               </button>
             </div>
@@ -941,8 +941,8 @@
         id: uid(),
         firstName: "",
         lastName: "",
-        middleName:  "",
-        gender: "M",
+        middleName: "",
+        gender:  "M",
         birthDate: "",
         deathDate: "",
         description: "",
@@ -965,7 +965,7 @@
       };
 
       const submit = () => {
-        if (! form.lastName. trim() || !form.firstName.trim()) {
+        if (!form.lastName. trim() || !form.firstName. trim()) {
           alert("Имя и фамилия обязательны");
           return;
         }
@@ -999,7 +999,7 @@
             <Field label="Пол">
               <select className="w-full border rounded-xl px-3 py-2"
                       value={form.gender}
-                      onChange={(e) => setForm(prev => ({... prev, gender: e.target. value}))}>
+                      onChange={(e) => setForm(prev => ({...prev, gender: e.target.value}))}>
                 <option value="M">Мужской</option>
                 <option value="F">Женский</option>
               </select>
@@ -1047,7 +1047,7 @@
     function CoupleFormModal({ people, onClose, onSave }) {
       const [form, setForm] = useState({
         partner1Id: "",
-        partner2Id: "",
+        partner2Id:  "",
         status: "married"
       });
 
@@ -1082,7 +1082,7 @@
             <Field label="Партнёр 2">
               <select className="w-full border rounded-xl px-3 py-2"
                       value={form.partner2Id}
-                      onChange={(e) => setForm(prev => ({...prev, partner2Id: e.target. value}))}>
+                      onChange={(e) => setForm(prev => ({...prev, partner2Id: e.target.value}))}>
                 <option value="">Выберите…</option>
                 {people.map(p => (
                   <option key={p.id} value={p.id}>{safeName(p)}</option>
@@ -1093,7 +1093,7 @@
             <Field label="Статус">
               <select className="w-full border rounded-xl px-3 py-2"
                       value={form.status}
-                      onChange={(e) => setForm(prev => ({...prev, status: e.target.value}))}>
+                      onChange={(e) => setForm(prev => ({...prev, status: e. target.value}))}>
                 <option value="married">Брак ❤️</option>
                 <option value="divorced">Развод 💔</option>
               </select>
@@ -1117,12 +1117,12 @@
       const [existingId, setExistingId] = useState("");
       const [child, setChild] = useState({
         firstName: "",
-        lastName: "",
+        lastName:  "",
         middleName: "",
         gender: "M",
         birthDate: "",
         deathDate: "",
-        description: "",
+        description:  "",
         mainPhoto: ""
       });
 
@@ -1252,7 +1252,7 @@
           )}
 
           <div className="space-y-4 max-h-96 overflow-y-auto">
-            {person.birthDate && (
+            {person. birthDate && (
               <div className="text-sm">
                 <span className="font-semibold text-slate-900">Рождение:</span>
                 <span className="text-slate-600 ml-2">{new Date(person.birthDate).toLocaleDateString("ru-RU")}</span>
@@ -1291,7 +1291,7 @@
 
             {person.photos?. length > 0 && (
               <div className="text-sm">
-                <span className="font-semibold text-slate-900">Альбом: </span>
+                <span className="font-semibold text-slate-900">Альбом:  </span>
                 <div className="grid grid-cols-3 gap-2 mt-2">
                   {person.photos.map((photo, idx) => (
                     <div key={idx} className="relative group">
@@ -1313,7 +1313,7 @@
             {isAdmin && (
               <Field label="Добавить фото в альбом">
                 <input type="file" accept="image/*" className="w-full border rounded-xl px-3 py-2"
-                       onChange={(e) => onAddAlbumPhoto(e. target.files?.[0])} />
+                       onChange={(e) => onAddAlbumPhoto(e.target.files?.[0])} />
               </Field>
             )}
 
@@ -1324,7 +1324,7 @@
                 {comments.map(c => (
                   <div key={c.id} className="bg-slate-100 rounded-lg p-2 text-sm">
                     <div className="flex items-center justify-between mb-1">
-                      <span className="font-semibold text-slate-900">{c.author}</span>
+                      <span className="font-semibold text-slate-900">{c. author}</span>
                       {isAdmin && (
                         <button
                           onClick={() => onDeleteComment(c.id)}
