@@ -933,27 +933,58 @@
       if (p1?.id) nextPath.add(p1.id);
       if (p2?.id) nextPath.add(p2.id);
 
+      // Если это пара ребенка (focusPersonId задан), показываем только одну карточку + сердечко
+      const showOnlyOne = focusPersonId && (p1?.id === focusPersonId || p2?.id === focusPersonId);
+      
       return (
         <>
           <div className="coupleContainer">
-            <div className="coupleRow">
-              {!focusPersonId || p1?.id !== focusPersonId ? (
-                <PersonCardMini person={p1} onClick={() => p1 && onSelectPerson(p1.id)} />
-              ) : null}
-
-              <div
-                className="coupleMid"
-                title={isAdmin ? "Добавить ребёнка" : "Только админ может менять дерево"}
-                aria-disabled={!isAdmin}
-                onClick={() => isAdmin && onOpenAddChild(couple.id)}
-              >
-                {statusIcon}
+            {showOnlyOne ? (
+              // Показываем только партнера (не самого человека) + сердечко
+              <div className="coupleRow">
+                {p1?.id === focusPersonId ? (
+                  <>
+                    <div
+                      className="coupleMid"
+                      title={isAdmin ? "Добавить ребёнка" : "Только админ может менять дерево"}
+                      aria-disabled={!isAdmin}
+                      onClick={() => isAdmin && onOpenAddChild(couple.id)}
+                    >
+                      {statusIcon}
+                    </div>
+                    <PersonCardMini person={p2} onClick={() => p2 && onSelectPerson(p2.id)} />
+                  </>
+                ) : (
+                  <>
+                    <PersonCardMini person={p1} onClick={() => p1 && onSelectPerson(p1.id)} />
+                    <div
+                      className="coupleMid"
+                      title={isAdmin ? "Добавить ребёнка" : "Только админ может менять дерево"}
+                      aria-disabled={!isAdmin}
+                      onClick={() => isAdmin && onOpenAddChild(couple.id)}
+                    >
+                      {statusIcon}
+                    </div>
+                  </>
+                )}
               </div>
-
-              {!focusPersonId || p2?.id !== focusPersonId ? (
+            ) : (
+              // Обычная пара - показываем обоих
+              <div className="coupleRow">
+                <PersonCardMini person={p1} onClick={() => p1 && onSelectPerson(p1.id)} />
+                
+                <div
+                  className="coupleMid"
+                  title={isAdmin ? "Добавить ребёнка" : "Только админ может менять дерево"}
+                  aria-disabled={!isAdmin}
+                  onClick={() => isAdmin && onOpenAddChild(couple.id)}
+                >
+                  {statusIcon}
+                </div>
+                
                 <PersonCardMini person={p2} onClick={() => p2 && onSelectPerson(p2.id)} />
-              ) : null}
-            </div>
+              </div>
+            )}
 
             <div className="mt-2 flex items-center justify-center gap-2">
               {children.length > 0 && (
