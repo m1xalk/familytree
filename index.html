@@ -208,23 +208,55 @@
       .personCard .font-semibold { font-size: 11px; }
       .personCard .text-xs { font-size: 9px; }
     }
-  
-    /* Узел-человек: линия сверху приходит в карточку, а ниже можно показывать супругов/пары */
-    .personNodeMain{ position: relative; display:flex; justify-content:center; }
-    .personNodeCouples{ margin-top: 10px; display:flex; flex-direction:column; align-items:center; gap: 10px; }
-    .personNodeCouple{ position: relative; }
+  /* Child-couple connector: make parent line land on the CHILD person's card inside the couple */
+.childCoupleNode::before,
+.childCoupleNode::after { display:none !important; }
 
-    /* Линия вниз от центра карточки ребёнка к его паре (с округлённым углом) */
-    .personNodeCouples::before{
-      content:"";
-      position:absolute;
-      left:50%;
-      top:-10px;
-      height:10px;
-      border-left:2px solid #cbd5e1;
-      transform: translateX(-1px);
-    }
+.childCoupleNode > .childCoupleWrap { position: relative; display:inline-block; padding-top:18px; }
 
+/* vertical from parent to elbow line */
+.childCoupleNode > .childCoupleWrap::before{
+  content:"";
+  position:absolute;
+  left:50%;
+  top:0;
+  height:18px;
+  border-left:2px solid #cbd5e1;
+  transform: translateX(-1px);
+}
+
+/* elbow: from 50% to child's card center (px), then down */
+.childCoupleNode > .childCoupleWrap::after{
+  content:"";
+  position:absolute;
+  top:0;
+  height:18px;
+  left:0;
+  width:100%;
+  pointer-events:none;
+  /* We'll draw two borders: top + left/right depending on direction */
+}
+
+/* default anchor if JS didn't measure yet */
+.childCoupleNode > .childCoupleWrap{ --anchor-px: 50%; }
+
+/* anchor left of center */
+.childCoupleNode > .childCoupleWrap[data-side="left"]::after{
+  left: var(--anchor-px);
+  width: calc(50% - var(--anchor-px));
+  border-top:2px solid #cbd5e1;
+  border-left:2px solid #cbd5e1;
+  border-top-left-radius: 12px;
+}
+
+/* anchor right of center */
+.childCoupleNode > .childCoupleWrap[data-side="right"]::after{
+  left: 50%;
+  width: calc(var(--anchor-px) - 50%);
+  border-top:2px solid #cbd5e1;
+  border-right:2px solid #cbd5e1;
+  border-top-right-radius: 12px;
+}
 </style>
 </head>
 
@@ -988,49 +1020,27 @@
                   {statusIcon}
                 </div>
                 {p1?.id === focusPersonId ? (
-                  <PersonCardMini person={p2} onClick={() => p2 && onSelectPerson(p2.id)} />
+                  <div ref={p2Ref} style={{display:"contents"}}><PersonCardMini person={p2} onClick={() => p2 && onSelectPerson(p2.id)} /></div>
                 ) : (
-                  <PersonCardMini person={p1} onClick={() => p1 && onSelectPerson(p1.id)} />
+                  <div ref={p1Ref} style={{display:"contents"}}><PersonCardMini person={p1} onClick={() => p1 && onSelectPerson(p1.id)} /></div>
                 )}
               </div>
             ) : (
               // Обычная пара - показываем обоих
-              <div className="coupleRow">
-              {(() => {
-                const hideLeft = focusPersonId && p1?.id === focusPersonId;
-                const hideRight = focusPersonId && p2?.id === focusPersonId;
-
-                const Placeholder = () => (
-                  <div className="personCard" style={{ visibility: "hidden" }}>
-                    <div className="avatar">__</div>
-                    <div className="text-left min-w-0">
-                      <div className="font-semibold text-slate-900 truncate">__</div>
-                      <div className="text-xs text-slate-500 truncate">__</div>
-                      <div className="text-xs text-slate-600 flex items-center gap-2">
-                        <span>__</span><span>__</span>
-                      </div>
-                    </div>
-                  </div>
-                );
-
-                return (
-                  <>
-                    {hideLeft ? <Placeholder /> : <PersonCardMini person={p1} onClick={() => p1 && onSelectPerson(p1.id)} />}
-
-                    <div
-                      className="coupleMid"
-                      title={isAdmin ? "Добавить ребёнка" : "Только админ может менять дерево"}
-                      aria-disabled={!isAdmin}
-                      onClick={() => isAdmin && onOpenAddChild(couple.id)}
-                    >
-                      {statusIcon}
-                    </div>
-
-                    {hideRight ? <Placeholder /> : <PersonCardMini person={p2} onClick={() => p2 && onSelectPerson(p2.id)} />}
-                  </>
-                );
-              })()}
-            </div>
+              <div className="coupleRow" ref={renderAsChildCouple ? wrapRef : undefined}>
+                <PersonCardMini person={p1} onClick={() => p1 && onSelectPerson(p1.id)} />
+                
+                <div
+                  className="coupleMid"
+                  title={isAdmin ? "Добавить ребёнка" : "Только админ может менять дерево"}
+                  aria-disabled={!isAdmin}
+                  onClick={() => isAdmin && onOpenAddChild(couple.id)}
+                >
+                  {statusIcon}
+                </div>
+                
+                <PersonCardMini person={p2} onClick={() => p2 && onSelectPerson(p2.id)} />
+              </div>
             )}
 
             <div className="mt-2 flex items-center justify-center gap-2">
@@ -1091,39 +1101,43 @@
     }) {
       const personCouples = (couplesByPerson.get(person.id) || []);
 
-      // 1) Узел дерева всегда = карточка ребёнка (в неё приходит линия сверху).
-      // 2) Если у ребёнка есть супруг(а), показываем пару НИЖЕ как отдельный блок,
-      //    чтобы линии от родителей шли именно в ребёнка, а не в центр пары.
-      return (
-        <li className="personNodeLi">
-          <div className="personNodeMain">
-            <PersonCardMini person={person} onClick={() => onSelectPerson(person.id)} />
-          </div>
-
-          {personCouples.length > 0 && (
-            <div className="personNodeCouples">
-              {personCouples.map((c) => (
-                <div key={c.id} className="personNodeCouple">
-                  <TreeCoupleContent
-                    couple={c}
-                    people={people}
-                    couples={couples}
-                    couplesByPerson={couplesByPerson}
-                    expandedCouples={expandedCouples}
-                    toggleCoupleExpanded={toggleCoupleExpanded}
-                    onSelectPerson={onSelectPerson}
-                    isAdmin={isAdmin}
-                    onOpenAddChild={onOpenAddChild}
-                    onDeleteCouple={onDeleteCouple}
-                    onDetachChild={onDetachChild}
-                    depth={depth + 1}
-                    path={new Set([...path, person.id])}
-                    focusPersonId={person.id}
-                  />
-                </div>
-              ))}
+      if (!personCouples.length) {
+        return (
+          <li>
+            <div className="flex flex-col items-center gap-2">
+              <PersonCardMini person={person} onClick={() => onSelectPerson(person.id)} />
             </div>
-          )}
+          </li>
+        );
+      }
+
+      // Показываем именно парой (как у корней), но линию родителей "прибиваем" к центру карточки ребёнка внутри пары.
+      // Для этого оборачиваем в childCoupleNode и передаём focusPersonId.
+      return (
+        <li className="childCoupleNode">
+          <div className="childCoupleWrap">
+            {personCouples.map((c) => (
+              <div key={c.id} className="w-full">
+                <TreeCoupleContent
+                  couple={c}
+                  people={people}
+                  couples={couples}
+                  couplesByPerson={couplesByPerson}
+                  expandedCouples={expandedCouples}
+                  toggleCoupleExpanded={toggleCoupleExpanded}
+                  onSelectPerson={onSelectPerson}
+                  isAdmin={isAdmin}
+                  onOpenAddChild={onOpenAddChild}
+                  onDeleteCouple={onDeleteCouple}
+                  onDetachChild={onDetachChild}
+                  depth={depth + 1}
+                  path={new Set([...path, person.id])}
+                  focusPersonId={person.id}
+                  renderAsChildCouple={true}
+                />
+              </div>
+            ))}
+          </div>
         </li>
       );
     }
