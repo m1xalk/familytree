@@ -1052,41 +1052,44 @@
     }) {
       const personCouples = (couplesByPerson.get(person.id) || []);
 
+      if (!personCouples.length) {
+        return (
+          <li>
+            <div className="flex flex-col items-center gap-2">
+              <PersonCardMini person={person} onClick={() => onSelectPerson(person.id)} />
+            </div>
+          </li>
+        );
+      }
+
       return (
         <li>
-          <div className="flex flex-col items-center gap-2">
-            <PersonCardMini person={person} onClick={() => onSelectPerson(person.id)} />
+          <div className="flex flex-col items-center gap-3">
+            {personCouples.map((c) => (
+              <div key={c.id} className="w-full">
+                <TreeCoupleContent
+                  couple={c}
+                  people={people}
+                  couples={couples}
+                  couplesByPerson={couplesByPerson}
+                  expandedCouples={expandedCouples}
+                  toggleCoupleExpanded={toggleCoupleExpanded}
+                  onSelectPerson={onSelectPerson}
+                  isAdmin={isAdmin}
+                  onOpenAddChild={onOpenAddChild}
+                  onDeleteCouple={onDeleteCouple}
+                  onDetachChild={onDetachChild}
+                  depth={depth + 1}
+                  path={new Set([...path, person.id])}
+                />
+              </div>
+            ))}
           </div>
-
-          {personCouples.length > 0 && (
-            <ul className="clearfix">
-              {personCouples.map((c) => (
-                <li key={c.id}>
-                  <TreeCoupleContent
-                    couple={c}
-                    people={people}
-                    couples={couples}
-                    couplesByPerson={couplesByPerson}
-                    expandedCouples={expandedCouples}
-                    toggleCoupleExpanded={toggleCoupleExpanded}
-                    onSelectPerson={onSelectPerson}
-                    isAdmin={isAdmin}
-                    onOpenAddChild={onOpenAddChild}
-                    onDeleteCouple={onDeleteCouple}
-                    onDetachChild={onDetachChild}
-                    depth={depth + 1}
-                    path={new Set([...path, person.id])}
-                    focusPersonId={person.id}
-                  />
-                </li>
-              ))}
-            </ul>
-          )}
         </li>
       );
     }
 
-    function PersonCardMini({ person, onClick }) {
+function PersonCardMini({ person, onClick }) {
       if (!person) {
         return (
           <div className="personCard opacity-60 cursor-not-allowed">
