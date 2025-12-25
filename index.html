@@ -209,42 +209,20 @@
       .personCard .text-xs { font-size: 9px; }
     }
   
-            /* Линии к "ребёнок + супруг(а)" — привязываем к ребёнку.
-       Нужно как на (красной) схеме: от узла (центр, 50%) идём по верху к центру карточки ребёнка,
-       затем вниз с таким же скруглением, как у остальных.
-       Важно: убираем ВСЕ стандартные линии CSS-дерева для этого вложенного блока, чтобы не было "синих" лишних линий. */
-    .childCoupleUl::before { display: none !important; }
-    .childCoupleLi::before,
-    .childCoupleLi::after { display: none !important; }
+    /* Узел-человек: линия сверху приходит в карточку, а ниже можно показывать супругов/пары */
+    .personNodeMain{ position: relative; display:flex; justify-content:center; }
+    .personNodeCouples{ margin-top: 10px; display:flex; flex-direction:column; align-items:center; gap: 10px; }
+    .personNodeCouple{ position: relative; }
 
-    .childCoupleWrap { position: relative; padding-top: 0; }
-
-    /* L-образная линия: от центра узла (50%) к центру карточки ребёнка, затем вниз */
-    .childCoupleWrap::before{
+    /* Линия вниз от центра карточки ребёнка к его паре (с округлённым углом) */
+    .personNodeCouples::before{
       content:"";
       position:absolute;
-      top:0;
-      height:18px;
-      background: transparent;
-      pointer-events: none;
-    }
-
-    /* ребёнок слева: горизонталь 50% -> anchorX, потом вниз по левому краю псевдоэлемента */
-    .childCoupleWrap[data-anchor="left"]::before{
-      left: var(--anchor-x, 25%);
-      width: calc(50% - var(--anchor-x, 25%));
-      border-top: 2px solid #cbd5e1;
-      border-left: 2px solid #cbd5e1;
-      border-top-left-radius: 12px;
-    }
-
-    /* ребёнок справа: горизонталь 50% -> anchorX, потом вниз по правому краю псевдоэлемента */
-    .childCoupleWrap[data-anchor="right"]::before{
-      left: 50%;
-      width: calc(var(--anchor-x, 75%) - 50%);
-      border-top: 2px solid #cbd5e1;
-      border-right: 2px solid #cbd5e1;
-      border-top-right-radius: 12px;
+      left:50%;
+      top:-10px;
+      height:10px;
+      border-left:2px solid #cbd5e1;
+      transform: translateX(-1px);
     }
 
 </style>
@@ -809,7 +787,7 @@
                 </div>
               ) : (
                 <div className="tree">
-                  <ul className="clearfix childCoupleUl">
+                  <ul className="clearfix">
                     {rootCouples.map(c => (
                       <TreeCoupleNode
                         key={c.id}
@@ -1091,49 +1069,38 @@
     }) {
       const personCouples = (couplesByPerson.get(person.id) || []);
 
-      if (!personCouples.length) {
-        return (
-          <li>
-            <div className="flex flex-col items-center gap-2">
-              <PersonCardMini person={person} onClick={() => onSelectPerson(person.id)} />
-            </div>
-          </li>
-        );
-      }
-
+      // 1) Узел дерева всегда = карточка ребёнка (в неё приходит линия сверху).
+      // 2) Если у ребёнка есть супруг(а), показываем пару НИЖЕ как отдельный блок,
+      //    чтобы линии от родителей шли именно в ребёнка, а не в центр пары.
       return (
-        <li>
-          <div className="flex flex-col items-center gap-3">
-            {personCouples.map((c) => {
-              const isLeft = c.partner1Id === person.id;
-              const anchor = isLeft ? "left" : "right";
-              const anchorX = isLeft ? "25%" : "75%";
-
-              return (
-                <ul key={c.id} className="clearfix">
-                  <li className="childCoupleLi">
-                    <div className="childCoupleWrap" data-anchor={anchor} style={{ "--anchor-x": anchorX }}>
-                      <TreeCoupleContent
-                        couple={c}
-                        people={people}
-                        couples={couples}
-                        couplesByPerson={couplesByPerson}
-                        expandedCouples={expandedCouples}
-                        toggleCoupleExpanded={toggleCoupleExpanded}
-                        onSelectPerson={onSelectPerson}
-                        isAdmin={isAdmin}
-                        onOpenAddChild={onOpenAddChild}
-                        onDeleteCouple={onDeleteCouple}
-                        onDetachChild={onDetachChild}
-                        depth={depth + 1}
-                        path={new Set([...path, person.id])}
-                      />
-                    </div>
-                  </li>
-                </ul>
-              );
-            })}
+        <li className="personNodeLi">
+          <div className="personNodeMain">
+            <PersonCardMini person={person} onClick={() => onSelectPerson(person.id)} />
           </div>
+
+          {personCouples.length > 0 && (
+            <div className="personNodeCouples">
+              {personCouples.map((c) => (
+                <div key={c.id} className="personNodeCouple">
+                  <TreeCoupleContent
+                    couple={c}
+                    people={people}
+                    couples={couples}
+                    couplesByPerson={couplesByPerson}
+                    expandedCouples={expandedCouples}
+                    toggleCoupleExpanded={toggleCoupleExpanded}
+                    onSelectPerson={onSelectPerson}
+                    isAdmin={isAdmin}
+                    onOpenAddChild={onOpenAddChild}
+                    onDeleteCouple={onDeleteCouple}
+                    onDetachChild={onDetachChild}
+                    depth={depth + 1}
+                    path={new Set([...path, person.id])}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
         </li>
       );
     }
