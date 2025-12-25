@@ -36,6 +36,184 @@
      * ДАННЫЕ ПО УМОЛЧАНИЮ
      * (замени на свои)
      ********************/
+    function TreeView({ people, relationships, selectedPersonId, onSelect }) {
+  const peopleById = React.useMemo(() => {
+    const m = new Map();
+    for (const p of people) m.set(p.id, p);
+    return m;
+  }, [people]);
+
+  const parentLinks = React.useMemo(
+    () => relationships.filter(r => r.type === "parent-child"),
+    [relationships]
+  );
+
+  const childrenOf = React.useCallback((pid) => {
+    return parentLinks.filter(r => r.parentId === pid).map(r => r.childId);
+  }, [parentLinks]);
+
+  const parentsOf = React.useCallback((cid) => {
+    return parentLinks.filter(r => r.childId === cid).map(r => r.parentId);
+  }, [parentLinks]);
+
+  const roots = React.useMemo(() => {
+    const hasParent = new Set(parentLinks.map(r => r.childId));
+    return people.filter(p => !hasParent.has(p.id)).map(p => p.id);
+  }, [people, parentLinks]);
+
+  // BFS по уровням (поколения)
+  const levels = React.useMemo(() => {
+    const visited = new Set();
+    const lvlMap = new Map(); // id -> level
+    const q = [];
+
+    for (const rid of roots.length ? roots : people.map(p => p.id)) {
+      lvlMap.set(rid, 0);
+      q.push(rid);
+    }
+
+    while (q.length) {
+      const id = q.shift();
+      if (visited.has(id)) continue;
+      visited.add(id);
+
+      const L = lvlMap.get(id) ?? 0;
+      for (const ch of childrenOf(id)) {
+        const nextL = L + 1;
+        if (!lvlMap.has(ch) || (lvlMap.get(ch) > nextL)) lvlMap.set(ch, nextL);
+        q.push(ch);
+      }
+    }
+
+    // собрать массив уровней
+    const maxL = Math.max(0, ...Array.from(lvlMap.values()));
+    const arr = Array.from({ length: maxL + 1 }, () => []);
+    for (const p of people) {
+      const L = lvlMap.get(p.id);
+      if (L === undefined) continue;
+      arr[L].push(p.id);
+    }
+    // сортировка внутри уровня
+    for (const row of arr) {
+      row.sort((a, b) => {
+        const pa = peopleById.get(a); const pb = peopleById.get(b);
+        const an = ((pa?.lastName||"") + " " + (pa?.firstName||"")).toLowerCase();
+        const bn = ((pb?.lastName||"") + " " + (pb?.firstName||"")).toLowerCase();
+        return an.localeCompare(bn, "ru");
+      });
+    }
+    return arr;
+  }, [people, peopleById, roots, childrenOf]);
+
+  // layout
+  const NODE_W = 180;
+  const NODE_H = 54;
+  const GAP_X = 26;
+  const GAP_Y = 44;
+  const PAD = 30;
+
+  const positions = React.useMemo(() => {
+    const pos = new Map();
+    levels.forEach((row, yIdx) => {
+      row.forEach((id, xIdx) => {
+        const x = PAD + xIdx * (NODE_W + GAP_X);
+        const y = PAD + yIdx * (NODE_H + GAP_Y);
+        pos.set(id, { x, y });
+      });
+    });
+    return pos;
+  }, [levels]);
+
+  const size = React.useMemo(() => {
+    const rows = levels.length;
+    const cols = Math.max(1, ...levels.map(r => r.length));
+    return {
+      w: PAD * 2 + cols * NODE_W + (cols - 1) * GAP_X,
+      h: PAD * 2 + rows * NODE_H + (rows - 1) * GAP_Y
+    };
+  }, [levels]);
+
+  const lines = React.useMemo(() => {
+    const out = [];
+    for (const r of parentLinks) {
+      const p = positions.get(r.parentId);
+      const c = positions.get(r.childId);
+      if (!p || !c) continue;
+      const x1 = p.x + NODE_W / 2;
+      const y1 = p.y + NODE_H;
+      const x2 = c.x + NODE_W / 2;
+      const y2 = c.y;
+      // полилиния: вниз, потом к ребенку
+      out.push({ id: r.id, x1, y1, x2, y2 });
+    }
+    return out;
+  }, [parentLinks, positions]);
+
+  const nameOf = (id) => {
+    const p = peopleById.get(id);
+    if (!p) return "(?)";
+    const ln = (p.lastName || "").trim();
+    const fn = (p.firstName || "").trim();
+    return [ln, fn].filter(Boolean).join(" ").trim() || "(без имени)";
+  };
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-2xl p-4 overflow-auto">
+      <div className="text-sm text-slate-600 mb-2">
+        🌳 Схема: родители сверху, дети снизу. Нажми на человека, чтобы открыть карточку.
+      </div>
+
+      <svg width={size.w} height={size.h} className="select-none">
+        {/* линии */}
+        {lines.map(l => (
+          <polyline
+            key={l.id}
+            points={`${l.x1},${l.y1} ${l.x1},${(l.y1+l.y2)/2} ${l.x2},${(l.y1+l.y2)/2} ${l.x2},${l.y2}`}
+            fill="none"
+            stroke="rgba(100,116,139,0.8)"
+            strokeWidth="2"
+          />
+        ))}
+
+        {/* ноды */}
+        {Array.from(positions.entries()).map(([id, p]) => {
+          const isSel = id === selectedPersonId;
+          return (
+            <g key={id} onClick={() => onSelect(id)} style={{ cursor: "pointer" }}>
+              <rect
+                x={p.x} y={p.y}
+                width={NODE_W} height={NODE_H}
+                rx="14"
+                fill={isSel ? "rgba(99,102,241,0.14)" : "white"}
+                stroke={isSel ? "rgba(99,102,241,0.9)" : "rgba(226,232,240,1)"}
+                strokeWidth="2"
+              />
+              <text
+                x={p.x + NODE_W / 2}
+                y={p.y + 22}
+                textAnchor="middle"
+                fontSize="13"
+                fill="rgba(15,23,42,1)"
+              >
+                {nameOf(id).slice(0, 24)}
+              </text>
+              <text
+                x={p.x + NODE_W / 2}
+                y={p.y + 42}
+                textAnchor="middle"
+                fontSize="11"
+                fill="rgba(100,116,139,1)"
+              >
+                {parentsOf(id).length ? `родителей: ${parentsOf(id).length}` : "корень"}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
     const DEFAULT_PEOPLE = [
       { id: "p1", firstName: "Иван", lastName: "Иванов", gender: "M", birthDate: "1960-01-01", deathDate: "", notes: "" },
       { id: "p2", firstName: "Анна", lastName: "Иванова", gender: "F", birthDate: "1962-05-15", deathDate: "", notes: "" },
@@ -1016,3 +1194,4 @@
   </script>
 </body>
 </html>
+
