@@ -707,9 +707,9 @@
                         toggleCoupleExpanded={toggleCoupleExpanded}
                         onSelectPerson={(id) => setSelectedPersonId(id)}
                         isAdmin={isAdmin}
-                        onOpenAddChild={() => openAddChild(c.id)}
-                        onDeleteCouple={() => deleteCouple(c.id)}
-                        onDetachChild={(childId) => detachChild(c.id, childId)}
+                        onOpenAddChild={(coupleId) => openAddChild(coupleId)}
+                        onDeleteCouple={(coupleId) => deleteCouple(coupleId)}
+                        onDetachChild={(coupleId, childId) => detachChild(coupleId, childId)}
                         depth={0}
                         path={new Set()}
                       />
@@ -831,8 +831,36 @@
       toggleCoupleExpanded,
       onSelectPerson, isAdmin, onOpenAddChild,
       onDeleteCouple, onDetachChild,
-      depth, path,
-      focusPersonId = null // если задан, не показываем этого человека внутри пары (чтобы не дублировать)
+      depth, path
+    }) {
+      return (
+        <li>
+          <TreeCoupleContent
+            couple={couple}
+            people={people}
+            couples={couples}
+            couplesByPerson={couplesByPerson}
+            expandedCouples={expandedCouples}
+            toggleCoupleExpanded={toggleCoupleExpanded}
+            onSelectPerson={onSelectPerson}
+            isAdmin={isAdmin}
+            onOpenAddChild={onOpenAddChild}
+            onDeleteCouple={onDeleteCouple}
+            onDetachChild={onDetachChild}
+            depth={depth}
+            path={path}
+          />
+        </li>
+      );
+    }
+
+    function TreeCoupleContent({
+      couple, people, couples, couplesByPerson,
+      expandedCouples,
+      toggleCoupleExpanded,
+      onSelectPerson, isAdmin, onOpenAddChild,
+      onDeleteCouple, onDetachChild,
+      depth, path
     }) {
       const p1 = people.find(p => p.id === couple.partner1Id) || null;
       const p2 = people.find(p => p.id === couple.partner2Id) || null;
@@ -845,35 +873,27 @@
 
       const isExpanded = expandedCouples.has(couple.id);
 
-      // защита от циклов: если партнёры уже были в пути — не углубляемся
       const nextPath = new Set(path);
       if (p1?.id) nextPath.add(p1.id);
       if (p2?.id) nextPath.add(p2.id);
 
       return (
-        <li>
+        <>
           <div className="coupleDownLine">
-            {(() => {
-              const hideLeft = focusPersonId && p1?.id === focusPersonId;
-              const hideRight = focusPersonId && p2?.id === focusPersonId;
+            <div className="coupleRow">
+              <PersonCardMini person={p1} onClick={() => p1 && onSelectPerson(p1.id)} />
 
-              return (
-                <div className="coupleRow">
-                  {!hideLeft && <PersonCardMini person={p1} onClick={() => p1 && onSelectPerson(p1.id)} />}
+              <div
+                className="coupleMid"
+                title={isAdmin ? "Добавить ребёнка" : "Только админ может менять дерево"}
+                aria-disabled={!isAdmin}
+                onClick={() => isAdmin && onOpenAddChild(couple.id)}
+              >
+                {statusIcon}
+              </div>
 
-                  <div
-                    className="coupleMid"
-                    title={isAdmin ? "Добавить ребёнка" : "Только админ может менять дерево"}
-                    aria-disabled={!isAdmin}
-                    onClick={() => isAdmin && onOpenAddChild()}
-                  >
-                    {statusIcon}
-                  </div>
-
-                  {!hideRight && <PersonCardMini person={p2} onClick={() => p2 && onSelectPerson(p2.id)} />}
-                </div>
-              );
-            })()}
+              <PersonCardMini person={p2} onClick={() => p2 && onSelectPerson(p2.id)} />
+            </div>
 
             <div className="mt-2 flex items-center justify-center gap-2">
               {children.length > 0 && (
@@ -888,7 +908,7 @@
               {isAdmin && (
                 <button
                   className="text-xs px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200"
-                  onClick={onDeleteCouple}
+                  onClick={() => onDeleteCouple(couple.id)}
                   title="Удалить пару"
                 >
                   Удалить пару
@@ -911,6 +931,7 @@
                   onSelectPerson={onSelectPerson}
                   isAdmin={isAdmin}
                   onOpenAddChild={onOpenAddChild}
+                  onDeleteCouple={onDeleteCouple}
                   onDetachChild={onDetachChild}
                   depth={depth + 1}
                   path={nextPath}
@@ -918,24 +939,24 @@
               ))}
             </ul>
           )}
-        </li>
+        </>
       );
     }
 
-    function TreePersonNode({
+function TreePersonNode({
       person, people, couples, couplesByPerson,
       expandedCouples,
       toggleCoupleExpanded,
-      onSelectPerson, isAdmin, depth, path
+      onSelectPerson, isAdmin,
+      onOpenAddChild, onDeleteCouple, onDetachChild,
+      depth, path
     }) {
       const personCouples = (couplesByPerson.get(person.id) || []);
 
-      // Если у человека есть пара(ы) — показываем их сразу "на одном уровне" (как у корней),
-      // а не отдельно человека + кнопка "потомки".
-      // Если пар нет — просто показываем карточку человека (лист дерева).
       const nextPath = new Set(path);
       nextPath.add(person.id);
 
+      // Лист (нет пар)
       if (!personCouples.length) {
         return (
           <li>
@@ -947,13 +968,13 @@
         );
       }
 
-      // Несколько браков: показываем их "стеком" вертикально в одной ячейке, чтобы не ломать линию.
+      // Есть пары: показываем их сразу как "пара на уровне", без кнопки "потомки"
       return (
         <li>
           <div className="flex flex-col items-center gap-3">
             {personCouples.map((c) => (
               <div key={c.id} className="w-full">
-                <TreeCoupleNode
+                <TreeCoupleContent
                   couple={c}
                   people={people}
                   couples={couples}
@@ -962,12 +983,11 @@
                   toggleCoupleExpanded={toggleCoupleExpanded}
                   onSelectPerson={onSelectPerson}
                   isAdmin={isAdmin}
-                  onOpenAddChild={() => {}}
-                  onDeleteCouple={() => {}}
-                  onDetachChild={() => {}}
+                  onOpenAddChild={onOpenAddChild}
+                  onDeleteCouple={onDeleteCouple}
+                  onDetachChild={onDetachChild}
                   depth={depth + 1}
                   path={nextPath}
-                  focusPersonId={person.id}
                 />
               </div>
             ))}
