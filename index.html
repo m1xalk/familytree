@@ -1,837 +1,1374 @@
-<!DOCTYPE html>
-<html lang="en">
+<! DOCTYPE html>
+<html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Family Tree Manager</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Родословное дерево</title>
 
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }
+  <!-- React (UMD) + Babel для GitHub Pages -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min. js"></script>
 
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 10px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
-            overflow: hidden;
-        }
+  <!-- Tailwind -->
+  <script src="https://cdn.tailwindcss.com"></script>
 
-        .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 30px;
-            text-align: center;
-        }
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js"></script>
 
-        .header h1 {
-            font-size: 2.5em;
-            margin-bottom: 10px;
-        }
+  <style>
+    /* Вертикальное дерево сверху вниз с линиями (ul/li трюк) */
+    .tree { padding: 12px; overflow: auto; }
+    .tree ul { padding-top: 24px; position: relative; }
+    .tree li {
+      float: left;
+      text-align: center;
+      list-style: none;
+      position: relative;
+      padding: 24px 10px 0 10px;
+      min-width: 220px;
+    }
 
-        .auth-status {
-            background: rgba(255, 255, 255, 0.1);
-            padding: 15px;
-            border-radius: 5px;
-            margin-top: 15px;
-            font-size: 0.9em;
-        }
+    /* линии между соседними узлами */
+    .tree li::before,
+    .tree li::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      right: 50%;
+      border-top: 2px solid #cbd5e1;
+      width: 50%;
+      height: 24px;
+    }
+    .tree li::after {
+      right: auto;
+      left: 50%;
+      border-left: 2px solid #cbd5e1;
+    }
 
-        .auth-status.admin::before {
-            content: "👑 ";
-        }
+    /* одиночный ребенок */
+    .tree li:only-child::before,
+    .tree li:only-child::after { display: none; }
+    .tree li:only-child { padding-top: 0; }
 
-        .auth-status.guest::before {
-            content: "👤 ";
-        }
+    /* крайние дети */
+    .tree li:first-child::before { border:  0 none; }
+    .tree li:last-child::after { border: 0 none; }
+    .tree li:last-child:: before { border-right: 2px solid #cbd5e1; border-radius: 0 10px 0 0; }
+    .tree li:first-child::after { border-radius: 10px 0 0 0; }
 
-        .main-content {
-            display: flex;
-            min-height: calc(100vh - 200px);
-        }
+    /* вертикальная линия вниз к детям */
+    .tree ul ul:: before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left:  50%;
+      border-left: 2px solid #cbd5e1;
+      width: 0;
+      height:  24px;
+    }
 
-        .sidebar {
-            width: 300px;
-            background: #f8f9fa;
-            border-right: 1px solid #e0e0e0;
-            padding: 20px;
-            overflow-y: auto;
-        }
+    /* карточка человека */
+    .personCard {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border: 1px solid #e2e8f0;
+      border-radius: 16px;
+      background: #fff;
+      box-shadow: 0 8px 22px rgba(15,23,42,. 06);
+      max-width: 280px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .personCard:hover { box-shadow: 0 12px 28px rgba(15,23,42,.10); }
 
-        .sidebar h2 {
-            color: #333;
-            margin-bottom: 20px;
-            font-size: 1.2em;
-        }
+    . avatar {
+      width: 44px;
+      height: 44px;
+      border-radius:  999px;
+      object-fit: cover;
+      background: #e0e7ff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      color: #3730a3;
+      flex:  0 0 auto;
+      overflow: hidden;
+    }
 
-        .form-group {
-            margin-bottom: 15px;
-        }
+    /* пара (два человека + сердечко/развод в центре) */
+    .coupleRow {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      position: relative;
+    }
+    .coupleMid {
+      width: 36px;
+      height: 36px;
+      border-radius:  999px;
+      border: 1px solid #e2e8f0;
+      background: #fff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      box-shadow: 0 6px 16px rgba(15,23,42,.08);
+      cursor: pointer;
+      user-select: none;
+    }
+    .coupleMid[aria-disabled="true"] { cursor: default; opacity: . 65; }
 
-        .form-group label {
-            display: block;
-            margin-bottom: 5px;
-            color: #555;
-            font-weight: 600;
-            font-size: 0.9em;
-        }
+    /* вертикальная линия "узла семьи" вниз */
+    .coupleDownLine {
+      position: relative;
+      display: inline-block;
+    }
+    .coupleDownLine::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      bottom: -16px;
+      height: 16px;
+      border-left: 2px solid #cbd5e1;
+    }
 
-        .form-group input,
-        .form-group select,
-        .form-group textarea {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            font-size: 0.9em;
-            font-family: inherit;
-        }
-
-        .form-group input:focus,
-        .form-group select:focus,
-        .form-group textarea:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 5px rgba(102, 126, 234, 0.3);
-        }
-
-        .button-group {
-            display: flex;
-            gap: 10px;
-            margin-top: 15px;
-        }
-
-        button {
-            flex: 1;
-            padding: 10px;
-            border: none;
-            border-radius: 5px;
-            font-size: 0.9em;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .btn-primary {
-            background: #667eea;
-            color: white;
-        }
-
-        .btn-primary:hover {
-            background: #5568d3;
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
-        }
-
-        .btn-primary:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        .btn-secondary {
-            background: #e0e0e0;
-            color: #333;
-        }
-
-        .btn-secondary:hover {
-            background: #d0d0d0;
-            transform: translateY(-2px);
-        }
-
-        .btn-danger {
-            background: #f44336;
-            color: white;
-        }
-
-        .btn-danger:hover {
-            background: #da190b;
-            transform: translateY(-2px);
-        }
-
-        .btn-success {
-            background: #4caf50;
-            color: white;
-        }
-
-        .btn-success:hover {
-            background: #388e3c;
-        }
-
-        .content {
-            flex: 1;
-            padding: 20px;
-            overflow-y: auto;
-        }
-
-        .tree-container {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-            gap: 20px;
-        }
-
-        .person-card {
-            background: white;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            padding: 15px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-            transition: all 0.3s ease;
-        }
-
-        .person-card:hover {
-            border-color: #667eea;
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.2);
-            transform: translateY(-2px);
-        }
-
-        .person-card.admin-only {
-            border-left: 5px solid #667eea;
-        }
-
-        .person-card h3 {
-            color: #333;
-            margin-bottom: 10px;
-            word-break: break-word;
-        }
-
-        .person-info {
-            font-size: 0.9em;
-            color: #666;
-            margin-bottom: 8px;
-            word-break: break-word;
-        }
-
-        .person-info strong {
-            color: #333;
-        }
-
-        .card-actions {
-            display: flex;
-            gap: 8px;
-            margin-top: 12px;
-        }
-
-        .card-actions button {
-            flex: 1;
-            padding: 8px;
-            font-size: 0.8em;
-        }
-
-        .alert {
-            padding: 12px 15px;
-            margin-bottom: 15px;
-            border-radius: 5px;
-            border-left: 4px solid;
-        }
-
-        .alert-info {
-            background: #e3f2fd;
-            color: #1976d2;
-            border-color: #1976d2;
-        }
-
-        .alert-success {
-            background: #e8f5e9;
-            color: #388e3c;
-            border-color: #4caf50;
-        }
-
-        .alert-error {
-            background: #ffebee;
-            color: #c62828;
-            border-color: #f44336;
-        }
-
-        .alert-warning {
-            background: #fff3e0;
-            color: #e65100;
-            border-color: #ff9800;
-        }
-
-        .loading {
-            text-align: center;
-            padding: 40px;
-            color: #667eea;
-        }
-
-        .spinner {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #667eea;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 15px;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        .modal {
-            display: none;
-            position: fixed;
-            z-index: 1000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.4);
-        }
-
-        .modal-content {
-            background-color: #fefefe;
-            margin: 10% auto;
-            padding: 20px;
-            border: 1px solid #888;
-            border-radius: 8px;
-            width: 90%;
-            max-width: 400px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-        }
-
-        .close-modal {
-            color: #aaa;
-            float: right;
-            font-size: 28px;
-            font-weight: bold;
-            cursor: pointer;
-        }
-
-        .close-modal:hover {
-            color: black;
-        }
-
-        .sync-status {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            background: white;
-            padding: 15px 20px;
-            border-radius: 5px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-            font-size: 0.9em;
-            z-index: 999;
-        }
-
-        .sync-status.syncing {
-            background: #fff3e0;
-            color: #e65100;
-        }
-
-        .sync-status.synced {
-            background: #e8f5e9;
-            color: #388e3c;
-        }
-
-        .sync-status.error {
-            background: #ffebee;
-            color: #c62828;
-        }
-
-        .restricted-feature {
-            opacity: 0.6;
-            pointer-events: none;
-            position: relative;
-        }
-
-        .restricted-feature::after {
-            content: "👑 Admin Only";
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(0, 0, 0, 0.7);
-            color: white;
-            padding: 10px 15px;
-            border-radius: 5px;
-            font-size: 0.85em;
-            white-space: nowrap;
-            z-index: 10;
-        }
-
-        @media (max-width: 768px) {
-            .main-content {
-                flex-direction: column;
-            }
-
-            .sidebar {
-                width: 100%;
-                border-right: none;
-                border-bottom: 1px solid #e0e0e0;
-            }
-
-            .header h1 {
-                font-size: 1.8em;
-            }
-
-            .tree-container {
-                grid-template-columns: 1fr;
-            }
-        }
-    </style>
+    . clearfix::after { content: ""; display: table; clear: both; }
+  </style>
 </head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>👨‍👩‍👧‍👦 Family Tree Manager</h1>
-            <div class="auth-status" id="authStatus">Loading...</div>
-        </div>
 
-        <div class="main-content">
-            <div class="sidebar">
-                <h2 id="formTitle">Add Family Member</h2>
-                <div id="authForm"></div>
-                <div id="personForm"></div>
-            </div>
+<body class="bg-slate-50">
+  <div id="root"></div>
 
-            <div class="content">
-                <div id="alerts"></div>
-                <div id="treeContainer" class="tree-container"></div>
-                <div id="loading" class="loading" style="display: none;">
-                    <div class="spinner"></div>
-                    <p>Loading family tree...</p>
-                </div>
-            </div>
-        </div>
-    </div>
+  <script type="text/babel">
+    const { useEffect, useMemo, useState } = React;
 
-    <div class="sync-status" id="syncStatus"></div>
+    // =========================
+    // FIREBASE CONFIG
+    // =========================
+    // ЗАМЕНИ НА СВОИ ЗНАЧЕНИЯ из Firebase Console
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "your-project.firebaseapp.com",
+      databaseURL: "https://your-project-default-rtdb.firebaseio.com",
+      projectId: "your-project",
+      storageBucket: "your-project.appspot.com",
+      messagingSenderId: "123456789",
+      appId:  "1:123456789:web:abc123def456"
+    };
 
-    <script type="module">
-        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js';
-        import { 
-            getAuth, 
-            signInAnonymously, 
-            signOut, 
-            onAuthStateChanged,
-            createUserWithEmailAndPassword,
-            signInWithEmailAndPassword 
-        } from 'https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js';
-        import { 
-            getDatabase, 
-            ref, 
-            set, 
-            update,
-            remove, 
-            onValue, 
-            query, 
-            orderByChild,
-            equalTo 
-        } from 'https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js';
+    // Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+    const auth = firebase.auth();
 
-        // Firebase Configuration
-        // IMPORTANT: Replace with your actual Firebase config
-        const firebaseConfig = {
-            apiKey: "YOUR_API_KEY",
-            authDomain: "YOUR_AUTH_DOMAIN",
-            databaseURL: "YOUR_DATABASE_URL",
-            projectId: "YOUR_PROJECT_ID",
-            storageBucket: "YOUR_STORAGE_BUCKET",
-            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-            appId: "YOUR_APP_ID"
-        };
+    // =========================
+    // utils
+    // =========================
+    const uid = () => String(Date.now()) + "_" + Math.floor(Math.random() * 100000);
 
-        // Initialize Firebase
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const database = getDatabase(app);
+    const yearRange = (birthDate, deathDate) => {
+      const y = (d) => d ?  new Date(d).getFullYear() : "";
+      const b = y(birthDate);
+      const dd = y(deathDate);
+      if (! b && !dd) return "—";
+      if (b && !dd) return String(b);
+      if (b && dd) return `${b}–${dd}`;
+      return `—–${dd}`;
+    };
 
-        // Application State
-        let currentUser = null;
-        let userRole = 'guest';
-        let familyMembers = {};
-        let userRoles = {};
+    const safeName = (p) => {
+      const ln = (p?. lastName || "").trim();
+      const fn = (p?.firstName || "").trim();
+      return (ln + " " + fn).trim() || "Без имени";
+    };
 
-        // DOM Elements
-        const authStatus = document.getElementById('authStatus');
-        const alerts = document.getElementById('alerts');
-        const treeContainer = document.getElementById('treeContainer');
-        const loading = document.getElementById('loading');
-        const syncStatus = document.getElementById('syncStatus');
-        const authForm = document.getElementById('authForm');
-        const personForm = document.getElementById('personForm');
-        const formTitle = document.getElementById('formTitle');
+    // =========================
+    // App
+    // =========================
+    function App() {
+      // auth state
+      const [user, setUser] = useState(null);
+      const [loading, setLoading] = useState(true);
+      const [isAdmin, setIsAdmin] = useState(false);
+      const [showLogin, setShowLogin] = useState(false);
+      const [password, setPassword] = useState("");
+      const [email, setEmail] = useState("");
 
-        // Utility Functions
-        function showAlert(message, type = 'info') {
-            const alertDiv = document.createElement('div');
-            alertDiv.className = `alert alert-${type}`;
-            alertDiv.textContent = message;
-            alerts.appendChild(alertDiv);
+      // data from firebase
+      const [people, setPeople] = useState([]);
+      const [couples, setCouples] = useState([]);
+      const [comments, setComments] = useState([]);
 
-            setTimeout(() => alertDiv.remove(), 5000);
-        }
+      // UI state
+      const [selectedPersonId, setSelectedPersonId] = useState(null);
+      const selectedPerson = useMemo(() => people.find(p => p.id === selectedPersonId) || null, [people, selectedPersonId]);
 
-        function showSync(status, type = 'syncing') {
-            syncStatus.textContent = status;
-            syncStatus.className = `sync-status ${type}`;
-        }
+      const [expanded, setExpanded] = useState(new Set());
+      const [showPersonForm, setShowPersonForm] = useState(false);
+      const [editingPerson, setEditingPerson] = useState(null);
 
-        function isAdmin() {
-            return userRole === 'admin';
-        }
+      const [showCoupleForm, setShowCoupleForm] = useState(false);
 
-        function toggleElement(element, show) {
-            element.style.display = show ? 'block' : 'none';
-        }
+      const [addChildModal, setAddChildModal] = useState({ open: false, coupleId: null });
+      const [newComment, setNewComment] = useState("");
 
-        // Authentication Functions
-        function renderAuthForm() {
-            if (currentUser) {
-                authForm.innerHTML = `
-                    <button class="btn-danger" onclick="logoutUser()">Logout</button>
-                `;
-            } else {
-                authForm.innerHTML = `
-                    <div class="form-group">
-                        <label>Email</label>
-                        <input type="email" id="emailInput" placeholder="your@email.com">
-                    </div>
-                    <div class="form-group">
-                        <label>Password</label>
-                        <input type="password" id="passwordInput" placeholder="Password">
-                    </div>
-                    <div class="button-group">
-                        <button class="btn-primary" onclick="loginUser()">Login</button>
-                        <button class="btn-secondary" onclick="guestLogin()">Guest</button>
-                    </div>
-                    <button class="btn-primary" style="width: 100%; margin-top: 10px;" onclick="registerUser()">Register</button>
-                `;
-            }
-        }
+      // -------------------------
+      // Firebase Auth Listener
+      // -------------------------
+      useEffect(() => {
+        const unsubscribe = auth. onAuthStateChanged((currentUser) => {
+          setUser(currentUser);
+          setLoading(false);
 
-        window.loginUser = async function() {
-            const email = document.getElementById('emailInput')?.value;
-            const password = document.getElementById('passwordInput')?.value;
-
-            if (!email || !password) {
-                showAlert('Please enter email and password', 'warning');
-                return;
-            }
-
-            try {
-                showSync('Logging in...', 'syncing');
-                await signInWithEmailAndPassword(auth, email, password);
-                showAlert('Successfully logged in!', 'success');
-            } catch (error) {
-                showAlert(`Login failed: ${error.message}`, 'error');
-                showSync('Login failed', 'error');
-            }
-        };
-
-        window.registerUser = async function() {
-            const email = document.getElementById('emailInput')?.value;
-            const password = document.getElementById('passwordInput')?.value;
-
-            if (!email || !password) {
-                showAlert('Please enter email and password', 'warning');
-                return;
-            }
-
-            try {
-                showSync('Registering...', 'syncing');
-                await createUserWithEmailAndPassword(auth, email, password);
-                showAlert('Successfully registered! Please login with your credentials.', 'success');
-                renderAuthForm();
-            } catch (error) {
-                showAlert(`Registration failed: ${error.message}`, 'error');
-                showSync('Registration failed', 'error');
-            }
-        };
-
-        window.guestLogin = async function() {
-            try {
-                showSync('Logging in as guest...', 'syncing');
-                await signInAnonymously(auth);
-                showAlert('Logged in as guest. View-only mode enabled.', 'info');
-            } catch (error) {
-                showAlert(`Guest login failed: ${error.message}`, 'error');
-            }
-        };
-
-        window.logoutUser = async function() {
-            try {
-                await signOut(auth);
-                showAlert('Successfully logged out', 'success');
-            } catch (error) {
-                showAlert(`Logout failed: ${error.message}`, 'error');
-            }
-        };
-
-        // Firebase User Roles Management
-        async function setupUserRole(userId) {
-            const userRoleRef = ref(database, `userRoles/${userId}`);
-            
-            onValue(userRoleRef, (snapshot) => {
-                if (snapshot.exists()) {
-                    userRole = snapshot.val().role || 'guest';
-                } else {
-                    // New user - set as guest by default
-                    userRole = 'guest';
-                    set(userRoleRef, { role: 'guest', createdAt: new Date().toISOString() });
-                }
-                updateAuthStatus();
-                renderPersonForm();
-                updateUIPermissions();
+          if (currentUser) {
+            // Проверяем админский статус
+            db.ref(`admins/${currentUser.uid}`).once("value", (snap) => {
+              setIsAdmin(!! snap.val());
             });
-        }
 
-        // Family Members Management
-        function renderPersonForm() {
-            if (!currentUser) {
-                personForm.innerHTML = '';
-                formTitle.textContent = 'Add Family Member';
-                return;
-            }
-
-            if (!isAdmin()) {
-                formTitle.textContent = 'Family Tree (View Only)';
-                personForm.innerHTML = '<p style="color: #999; font-size: 0.9em;">Request admin access to add/edit members</p>';
-                return;
-            }
-
-            formTitle.textContent = 'Add Family Member';
-            personForm.innerHTML = `
-                <div class="form-group">
-                    <label>Full Name *</label>
-                    <input type="text" id="nameInput" placeholder="John Doe" required>
-                </div>
-                <div class="form-group">
-                    <label>Birth Year</label>
-                    <input type="number" id="birthYearInput" placeholder="1980" min="1900" max="${new Date().getFullYear()}">
-                </div>
-                <div class="form-group">
-                    <label>Relationship</label>
-                    <select id="relationshipInput">
-                        <option value="">Select...</option>
-                        <option value="parent">Parent</option>
-                        <option value="child">Child</option>
-                        <option value="spouse">Spouse</option>
-                        <option value="sibling">Sibling</option>
-                        <option value="grandparent">Grandparent</option>
-                        <option value="grandchild">Grandchild</option>
-                        <option value="other">Other</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Notes</label>
-                    <textarea id="notesInput" placeholder="Add any notes..." rows="3"></textarea>
-                </div>
-                <div class="button-group">
-                    <button class="btn-primary" onclick="addPerson()">Add Member</button>
-                    <button class="btn-secondary" onclick="clearForm()">Clear</button>
-                </div>
-            `;
-        }
-
-        window.addPerson = async function() {
-            const name = document.getElementById('nameInput')?.value?.trim();
-            const birthYear = document.getElementById('birthYearInput')?.value?.trim();
-            const relationship = document.getElementById('relationshipInput')?.value?.trim();
-            const notes = document.getElementById('notesInput')?.value?.trim();
-
-            if (!name) {
-                showAlert('Please enter a name', 'warning');
-                return;
-            }
-
-            if (!isAdmin()) {
-                showAlert('You need admin permissions to add members', 'warning');
-                return;
-            }
-
-            try {
-                showSync('Adding member...', 'syncing');
-                const personRef = ref(database, `familyMembers/${Date.now()}`);
-                await set(personRef, {
-                    name,
-                    birthYear: birthYear ? parseInt(birthYear) : null,
-                    relationship: relationship || '',
-                    notes: notes || '',
-                    createdBy: currentUser.uid,
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
-                });
-                
-                showAlert(`${name} added to family tree!`, 'success');
-                clearForm();
-                showSync('Synced', 'synced');
-            } catch (error) {
-                showAlert(`Failed to add member: ${error.message}`, 'error');
-                showSync('Sync failed', 'error');
-            }
-        };
-
-        window.clearForm = function() {
-            document.getElementById('nameInput').value = '';
-            document.getElementById('birthYearInput').value = '';
-            document.getElementById('relationshipInput').value = '';
-            document.getElementById('notesInput').value = '';
-        };
-
-        window.editPerson = function(id) {
-            const person = familyMembers[id];
-            if (!isAdmin()) {
-                showAlert('You need admin permissions to edit members', 'warning');
-                return;
-            }
-
-            document.getElementById('nameInput').value = person.name;
-            document.getElementById('birthYearInput').value = person.birthYear || '';
-            document.getElementById('relationshipInput').value = person.relationship || '';
-            document.getElementById('notesInput').value = person.notes || '';
-
-            document.querySelector('.sidebar').scrollIntoView({ behavior: 'smooth' });
-        };
-
-        window.deletePerson = async function(id, name) {
-            if (!isAdmin()) {
-                showAlert('You need admin permissions to delete members', 'warning');
-                return;
-            }
-
-            if (!confirm(`Are you sure you want to delete ${name}?`)) {
-                return;
-            }
-
-            try {
-                showSync('Deleting member...', 'syncing');
-                const personRef = ref(database, `familyMembers/${id}`);
-                await remove(personRef);
-                showAlert(`${name} removed from family tree`, 'success');
-                showSync('Synced', 'synced');
-            } catch (error) {
-                showAlert(`Failed to delete member: ${error.message}`, 'error');
-                showSync('Sync failed', 'error');
-            }
-        };
-
-        function renderFamilyTree() {
-            if (Object.keys(familyMembers).length === 0) {
-                treeContainer.innerHTML = '<p style="grid-column: 1/-1; text-align: center; color: #999; padding: 40px;">No family members yet. ' + 
-                    (isAdmin() ? 'Add one using the form on the left.' : 'Contact an admin to add members.') + '</p>';
-                return;
-            }
-
-            treeContainer.innerHTML = '';
-
-            Object.entries(familyMembers).forEach(([id, person]) => {
-                const card = document.createElement('div');
-                card.className = 'person-card' + (person.createdBy === currentUser?.uid ? ' admin-only' : '');
-
-                let ageText = '';
-                if (person.birthYear) {
-                    const age = new Date().getFullYear() - person.birthYear;
-                    ageText = ` (Age: ${age})`;
-                }
-
-                card.innerHTML = `
-                    <h3>${person.name}</h3>
-                    <div class="person-info">
-                        <strong>Birth Year:</strong> ${person.birthYear || 'Unknown'}${ageText}
-                    </div>
-                    ${person.relationship ? `
-                        <div class="person-info">
-                            <strong>Relationship:</strong> ${person.relationship}
-                        </div>
-                    ` : ''}
-                    ${person.notes ? `
-                        <div class="person-info">
-                            <strong>Notes:</strong> ${person.notes}
-                        </div>
-                    ` : ''}
-                    <div class="person-info" style="font-size: 0.8em; color: #999;">
-                        Added: ${new Date(person.createdAt).toLocaleDateString()}
-                    </div>
-                    ${isAdmin() ? `
-                        <div class="card-actions">
-                            <button class="btn-secondary" onclick="editPerson('${id}')">Edit</button>
-                            <button class="btn-danger" onclick="deletePerson('${id}', '${person.name.replace(/'/g, "\\'")}')">Delete</button>
-                        </div>
-                    ` : ''}
-                `;
-                treeContainer.appendChild(card);
-            });
-        }
-
-        function updateAuthStatus() {
-            if (currentUser) {
-                const roleEmoji = isAdmin() ? '👑' : '👤';
-                const roleText = isAdmin() ? 'Admin' : 'Guest';
-                authStatus.innerHTML = `${roleEmoji} <strong>${currentUser.email || 'Anonymous User'}</strong><br>Role: <strong>${roleText}</strong>`;
-                authStatus.className = 'auth-status ' + userRole;
-            } else {
-                authStatus.textContent = 'Not logged in';
-                authStatus.className = 'auth-status';
-            }
-        }
-
-        function updateUIPermissions() {
-            const adminElements = document.querySelectorAll('[data-admin-only]');
-            adminElements.forEach(el => {
-                if (!isAdmin()) {
-                    el.classList.add('restricted-feature');
-                } else {
-                    el.classList.remove('restricted-feature');
-                }
-            });
-        }
-
-        // Firebase Listeners
-        function initializeFamilyTree() {
-            toggleElement(loading, true);
-            const membersRef = ref(database, 'familyMembers');
-
-            onValue(membersRef, (snapshot) => {
-                familyMembers = {};
-                if (snapshot.exists()) {
-                    familyMembers = snapshot.val();
-                }
-                renderFamilyTree();
-                toggleElement(loading, false);
-                showSync('Synced', 'synced');
-            }, (error) => {
-                showAlert(`Failed to load family tree: ${error.message}`, 'error');
-                toggleElement(loading, false);
-                showSync('Sync failed', 'error');
-            });
-        }
-
-        // Main Authentication Observer
-        onAuthStateChanged(auth, async (user) => {
-            if (user) {
-                currentUser = user;
-                await setupUserRole(user.uid);
-                renderAuthForm();
-                renderPersonForm();
-                initializeFamilyTree();
-                showSync('Synced', 'synced');
-            } else {
-                currentUser = null;
-                userRole = 'guest';
-                familyMembers = {};
-                renderAuthForm();
-                renderPersonForm();
-                treeContainer.innerHTML = '<p style="grid-column: 1/-1; text-align: center; color: #999; padding: 40px;">Please login to view the family tree</p>';
-                updateAuthStatus();
-            }
+            // Загружаем данные из Firebase
+            loadDataFromFirebase();
+          }
         });
 
-        // Make functions globally available
-        window.isAdmin = isAdmin;
-    </script>
+        return () => unsubscribe();
+      }, []);
+
+      // -------------------------
+      // Load Data from Firebase
+      // -------------------------
+      const loadDataFromFirebase = () => {
+        db.ref("people").on("value", (snap) => {
+          const data = snap.val() || {};
+          setPeople(Object.entries(data).map(([id, val]) => ({ id, ...val })));
+        });
+
+        db.ref("couples").on("value", (snap) => {
+          const data = snap.val() || {};
+          setCouples(Object. entries(data).map(([id, val]) => ({ id, ...val })));
+        });
+
+        db.ref("comments").on("value", (snap) => {
+          const data = snap.val() || {};
+          setComments(Object.entries(data).map(([id, val]) => ({ id, ...val })));
+        });
+      };
+
+      // -------------------------
+      // auth
+      // -------------------------
+      const handleAdminLogin = async () => {
+        try {
+          await auth.signInWithEmailAndPassword(email, password);
+          // Статус админа проверяется в onAuthStateChanged
+          setShowLogin(false);
+          setEmail("");
+          setPassword("");
+        } catch (err) {
+          alert("Ошибка входа:  " + err.message);
+        }
+      };
+
+      const handleGuestLogin = async () => {
+        try {
+          const result = await auth.signInAnonymously();
+          setShowLogin(false);
+          setEmail("");
+          setPassword("");
+        } catch (err) {
+          alert("Ошибка входа: " + err.message);
+        }
+      };
+
+      const handleLogout = async () => {
+        await auth. signOut();
+        setIsAdmin(false);
+      };
+
+      // -------------------------
+      // CRUD people (только админ)
+      // -------------------------
+      const addPerson = async (data) => {
+        if (!isAdmin) return;
+        const newId = uid();
+        const p = {
+          firstName: data.firstName || "",
+          lastName: data.lastName || "",
+          middleName:  data.middleName || "",
+          gender: data.gender || "M",
+          birthDate: data.birthDate || "",
+          deathDate: data.deathDate || "",
+          description: data.description || "",
+          mainPhoto: data.mainPhoto || "",
+          photos: data.mainPhoto ? [data.mainPhoto] : [],
+        };
+        await db.ref(`people/${newId}`).set(p);
+        setShowPersonForm(false);
+      };
+
+      const updatePerson = async (data) => {
+        if (!isAdmin) return;
+        await db.ref(`people/${data.id}`).update({
+          firstName: data.firstName,
+          lastName: data.lastName,
+          middleName: data. middleName,
+          gender:  data.gender,
+          birthDate: data.birthDate,
+          deathDate: data.deathDate,
+          description: data. description,
+          mainPhoto: data.mainPhoto,
+          photos: data.photos
+        });
+        setEditingPerson(null);
+        setShowPersonForm(false);
+        setSelectedPersonId(data.id);
+      };
+
+      const deletePerson = async (personId) => {
+        if (!isAdmin) return;
+        if (! confirm("Удалить человека?  Связи и комментарии будут очищены. ")) return;
+
+        await db.ref(`people/${personId}`).remove();
+
+        // очищаем пары
+        const couplesSnap = await db.ref("couples").once("value");
+        const couplesData = couplesSnap.val() || {};
+        for (const [coupleId, couple] of Object.entries(couplesData)) {
+          if (couple.partner1Id === personId || couple.partner2Id === personId) {
+            await db.ref(`couples/${coupleId}`).remove();
+          } else if (couple.childrenIds?. includes(personId)) {
+            await db.ref(`couples/${coupleId}/childrenIds`).set(
+              couple.childrenIds.filter(id => id !== personId)
+            );
+          }
+        }
+
+        // очищаем комментарии
+        const commentsSnap = await db.ref("comments").once("value");
+        const commentsData = commentsSnap.val() || {};
+        for (const [commentId, comment] of Object.entries(commentsData)) {
+          if (comment. personId === personId) {
+            await db.ref(`comments/${commentId}`).remove();
+          }
+        }
+
+        if (selectedPersonId === personId) setSelectedPersonId(null);
+      };
+
+      // -------------------------
+      // CRUD couples (только админ)
+      // -------------------------
+      const addCouple = async (data) => {
+        if (!isAdmin) return;
+        const newId = uid();
+        const c = {
+          partner1Id: data.partner1Id,
+          partner2Id: data. partner2Id,
+          status: data.status,
+          childrenIds: [],
+        };
+        await db. ref(`couples/${newId}`).set(c);
+        setShowCoupleForm(false);
+        setExpanded(prev => new Set([...prev, data.partner1Id, data.partner2Id, newId]));
+      };
+
+      const deleteCouple = async (coupleId) => {
+        if (!isAdmin) return;
+        if (! confirm("Удалить пару? Дети останутся как люди.")) return;
+        await db.ref(`couples/${coupleId}`).remove();
+      };
+
+      const updateCoupleChildren = async (coupleId, childrenIds) => {
+        if (!isAdmin) return;
+        await db.ref(`couples/${coupleId}/childrenIds`).set(childrenIds);
+      };
+
+      // -------------------------
+      // comments (админ и гости)
+      // -------------------------
+      const addComment = async () => {
+        if (!selectedPerson || !user) return;
+        const text = (newComment || "").trim();
+        if (!text) return;
+
+        const newId = uid();
+        await db.ref(`comments/${newId}`).set({
+          personId: selectedPerson.id,
+          author: isAdmin ? "Администратор" : (user.email || "Гость"),
+          text,
+          date: new Date().toISOString(),
+          userId: user.uid
+        });
+
+        setNewComment("");
+      };
+
+      const deleteComment = async (commentId) => {
+        if (!isAdmin) return;
+        await db.ref(`comments/${commentId}`).remove();
+      };
+
+      // -------------------------
+      // photos (только админ)
+      // -------------------------
+      const addPhotoToAlbum = async (personId, file) => {
+        if (!isAdmin || !file) return;
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+          const dataUrl = String(reader.result || "");
+          const person = people.find(p => p.id === personId);
+          const nextPhotos = [... (person?. photos || []), dataUrl];
+          await db.ref(`people/${personId}/photos`).set(nextPhotos);
+          setSelectedPersonId(personId);
+        };
+        reader.readAsDataURL(file);
+      };
+
+      const deleteAlbumPhoto = async (personId, index) => {
+        if (!isAdmin) return;
+        const person = people.find(p => p.id === personId);
+        const next = (person?.photos || []).filter((_, i) => i !== index);
+        await db.ref(`people/${personId}/photos`).set(next);
+      };
+
+      // -------------------------
+      // tree helpers
+      // -------------------------
+      const personIsChild = useMemo(() => {
+        const s = new Set();
+        for (const c of couples) for (const ch of (c.childrenIds || [])) s.add(ch);
+        return s;
+      }, [couples]);
+
+      const rootCouples = useMemo(() => {
+        const roots = couples.filter(c =>
+          ! personIsChild.has(c.partner1Id) && !personIsChild.has(c.partner2Id)
+        );
+        return roots.length ?  roots : couples;
+      }, [couples, personIsChild]);
+
+      const couplesByPerson = useMemo(() => {
+        const map = new Map();
+        for (const c of couples) {
+          if (!map.has(c.partner1Id)) map.set(c.partner1Id, []);
+          if (!map.has(c.partner2Id)) map.set(c.partner2Id, []);
+          map.get(c.partner1Id).push(c);
+          map.get(c. partner2Id).push(c);
+        }
+        return map;
+      }, [couples]);
+
+      const toggleExpanded = (key) => {
+        setExpanded(prev => {
+          const next = new Set(prev);
+          next.has(key) ? next.delete(key) : next.add(key);
+          return next;
+        });
+      };
+
+      // -------------------------
+      // add child workflow
+      // -------------------------
+      const openAddChild = (coupleId) => {
+        if (!isAdmin) return;
+        setAddChildModal({ open: true, coupleId });
+      };
+
+      const closeAddChild = () => setAddChildModal({ open: false, coupleId: null });
+
+      const createChildAndAttach = async (coupleId, childData) => {
+        if (!isAdmin) return;
+        const child = {
+          firstName: childData.firstName || "Новый",
+          lastName: childData.lastName || "",
+          middleName: childData.middleName || "",
+          gender: childData.gender || "M",
+          birthDate: childData.birthDate || "",
+          deathDate: childData.deathDate || "",
+          description:  childData.description || "",
+          mainPhoto: childData.mainPhoto || "",
+          photos: childData.mainPhoto ? [childData. mainPhoto] : [],
+        };
+
+        const childId = uid();
+        await db.ref(`people/${childId}`).set(child);
+
+        const couple = couples.find(c => c.id === coupleId);
+        await db.ref(`couples/${coupleId}/childrenIds`).set(
+          [... new Set([.. .(couple?.childrenIds || []), childId])]
+        );
+
+        setExpanded(prev => new Set([...prev, coupleId]));
+        closeAddChild();
+      };
+
+      const attachExistingChild = async (coupleId, childId) => {
+        if (!isAdmin) return;
+        const couple = couples.find(c => c.id === coupleId);
+        await db.ref(`couples/${coupleId}/childrenIds`).set(
+          [...new Set([.. .(couple?.childrenIds || []), childId])]
+        );
+        setExpanded(prev => new Set([...prev, coupleId]));
+        closeAddChild();
+      };
+
+      // -------------------------
+      // UI
+      // -------------------------
+
+      if (loading) {
+        return (
+          <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+            <div className="text-lg text-slate-600">Загрузка...</div>
+          </div>
+        );
+      }
+
+      if (! user) {
+        return (
+          <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+            <div className="bg-white rounded-2xl p-8 w-full max-w-sm shadow-lg">
+              <div className="text-2xl font-bold mb-6 text-center text-slate-900">Родословное дерево</div>
+
+              <div className="mb-6 text-sm text-slate-600 text-center">
+                Выберите способ входа:
+              </div>
+
+              <div className="space-y-3">
+                <button
+                  onClick={() => setShowLogin(true)}
+                  className="w-full px-4 py-3 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 font-semibold"
+                >
+                  Вход администратора
+                </button>
+
+                <button
+                  onClick={handleGuestLogin}
+                  className="w-full px-4 py-3 rounded-lg bg-slate-300 text-slate-800 hover:bg-slate-400 font-semibold"
+                >
+                  Просмотр как гость
+                </button>
+              </div>
+            </div>
+
+            {/* Admin Login Modal */}
+            {showLogin && (
+              <Modal onClose={() => setShowLogin(false)}>
+                <div className="text-lg font-semibold mb-4">Вход администратора</div>
+
+                <div className="space-y-3">
+                  <Field label="Email">
+                    <input
+                      className="w-full border rounded-xl px-3 py-2"
+                      type="email"
+                      placeholder="admin@example.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                    />
+                  </Field>
+
+                  <Field label="Пароль">
+                    <input
+                      className="w-full border rounded-xl px-3 py-2"
+                      type="password"
+                      placeholder="Пароль"
+                      value={password}
+                      onChange={(e) => setPassword(e.target. value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleAdminLogin()}
+                    />
+                  </Field>
+                </div>
+
+                <div className="text-xs text-slate-500 mt-3">
+                  Настройте Firebase Authentication и установите админский флаг в базе данных:  admins/[uid] = true
+                </div>
+
+                <div className="mt-4 flex gap-2">
+                  <button
+                    onClick={handleAdminLogin}
+                    className="flex-1 px-3 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700"
+                  >
+                    Войти
+                  </button>
+                  <button
+                    onClick={() => setShowLogin(false)}
+                    className="flex-1 px-3 py-2 rounded-xl bg-slate-200 text-slate-800 hover:bg-slate-300"
+                  >
+                    Отмена
+                  </button>
+                </div>
+              </Modal>
+            )}
+          </div>
+        );
+      }
+
+      return (
+        <div className="min-h-screen">
+          <header className="bg-white border-b">
+            <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-extrabold">FT</div>
+                <div>
+                  <div className="text-xl font-semibold text-slate-900">Родословное дерево</div>
+                  <div className="text-xs text-slate-500">
+                    {isAdmin ? "Админ" : "Гость"} • Firebase Realtime Database
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <div className="text-sm text-slate-600">
+                  {isAdmin ? "👤 Администратор" : "👁️ Гость"} • {user.email || "Анонимно"}
+                </div>
+                <button
+                  onClick={handleLogout}
+                  className="px-3 py-2 rounded-lg bg-rose-600 text-white hover: bg-rose-700"
+                >
+                  Выход
+                </button>
+              </div>
+            </div>
+          </header>
+
+          <main className="max-w-6xl mx-auto px-4 py-6 space-y-4">
+            {isAdmin && (
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => { setEditingPerson(null); setShowPersonForm(true); }}
+                  className="px-3 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700"
+                >
+                  + Добавить человека
+                </button>
+
+                <button
+                  onClick={() => setShowCoupleForm(true)}
+                  className="px-3 py-2 rounded-lg bg-sky-600 text-white hover: bg-sky-700"
+                >
+                  + Добавить пару
+                </button>
+              </div>
+            )}
+
+            <section className="bg-white border rounded-2xl p-3">
+              <div className="px-2 py-2 flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-lg font-semibold text-slate-900">Дерево сверху вниз</div>
+                  <div className="text-xs text-slate-500">
+                    {isAdmin && "Сердце/💔 — узел пары.  Клик → добавить ребёнка. "}
+                  </div>
+                </div>
+                <div className="text-xs text-slate-500">
+                  {people.length} людей • {couples.length} пар
+                </div>
+              </div>
+
+              {people.length === 0 ? (
+                <div className="p-6 text-slate-600">
+                  Пока пусто.  {isAdmin && "Добавьте людей и пары. "}
+                </div>
+              ) : couples.length === 0 ? (
+                <div className="p-6 text-slate-600">
+                  Есть люди, но нет пар. {isAdmin && "Добавьте пару, чтобы построить дерево."}
+                </div>
+              ) : (
+                <div className="tree">
+                  <ul className="clearfix">
+                    {rootCouples.map(c => (
+                      <TreeCoupleNode
+                        key={c.id}
+                        couple={c}
+                        people={people}
+                        couplesByPerson={couplesByPerson}
+                        expanded={expanded}
+                        toggleExpanded={toggleExpanded}
+                        onSelectPerson={(id) => setSelectedPersonId(id)}
+                        isAdmin={isAdmin}
+                        onOpenAddChild={() => openAddChild(c.id)}
+                      />
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </section>
+
+            {/* Detail Modal */}
+            {selectedPerson && (
+              <PersonDetailModal
+                person={selectedPerson}
+                isAdmin={isAdmin}
+                onClose={() => setSelectedPersonId(null)}
+                onEdit={() => { setEditingPerson(selectedPerson); setShowPersonForm(true); setSelectedPersonId(null); }}
+                onDelete={() => { const id = selectedPerson.id; setSelectedPersonId(null); deletePerson(id); }}
+                couples={couples}
+                people={people}
+                comments={comments. filter(c => c.personId === selectedPerson.id)}
+                onDeleteComment={deleteComment}
+                newComment={newComment}
+                setNewComment={setNewComment}
+                onAddComment={addComment}
+                onAddAlbumPhoto={(file) => addPhotoToAlbum(selectedPerson.id, file)}
+                onDeleteAlbumPhoto={(idx) => deleteAlbumPhoto(selectedPerson.id, idx)}
+              />
+            )}
+          </main>
+
+          {/* Person Form */}
+          {showPersonForm && (
+            <PersonFormModal
+              person={editingPerson}
+              onClose={() => { setShowPersonForm(false); setEditingPerson(null); }}
+              onSave={(data) => {
+                if (editingPerson) updatePerson(data);
+                else addPerson(data);
+              }}
+            />
+          )}
+
+          {/* Couple Form */}
+          {showCoupleForm && (
+            <CoupleFormModal
+              people={people}
+              onClose={() => setShowCoupleForm(false)}
+              onSave={(data) => addCouple(data)}
+            />
+          )}
+
+          {/* Add Child Modal */}
+          {addChildModal. open && (
+            <AddChildModal
+              people={people}
+              couple={couples. find(c => c.id === addChildModal.coupleId) || null}
+              onClose={closeAddChild}
+              onCreate={(childData) => createChildAndAttach(addChildModal.coupleId, childData)}
+              onAttachExisting={(childId) => attachExistingChild(addChildModal.coupleId, childId)}
+            />
+          )}
+        </div>
+      );
+    }
+
+    // =========================
+    // Tree Components
+    // =========================
+    function TreeCoupleNode({
+      couple,
+      people,
+      couplesByPerson,
+      expanded,
+      toggleExpanded,
+      onSelectPerson,
+      isAdmin,
+      onOpenAddChild
+    }) {
+      const p1 = people.find(p => p.id === couple.partner1Id) || null;
+      const p2 = people.find(p => p. id === couple.partner2Id) || null;
+      const statusIcon = couple.status === "divorced" ? "💔" : "❤️";
+
+      const children = (couple.childrenIds || [])
+        .map(id => people.find(p => p.id === id))
+        .filter(Boolean);
+
+      const isExpanded = expanded.has(couple.id);
+
+      return (
+        <li>
+          <div className="coupleDownLine">
+            <div className="coupleRow">
+              <PersonCardMini person={p1} onClick={() => p1 && onSelectPerson(p1.id)} />
+              <div
+                className="coupleMid"
+                title={isAdmin ? "Добавить ребёнка" : "Только админ"}
+                aria-disabled={! isAdmin}
+                onClick={() => isAdmin && onOpenAddChild()}
+              >
+                {statusIcon}
+              </div>
+              <PersonCardMini person={p2} onClick={() => p2 && onSelectPerson(p2.id)} />
+            </div>
+
+            {children.length > 0 && (
+              <div className="mt-2">
+                <button
+                  className="text-xs px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700"
+                  onClick={() => toggleExpanded(couple.id)}
+                >
+                  {isExpanded ? "Свернуть ▲" : `Показать детей (${children.length}) ▼`}
+                </button>
+              </div>
+            )}
+          </div>
+
+          {children. length > 0 && isExpanded && (
+            <ul className="clearfix">
+              {children.map(ch => (
+                <TreePersonDescNode
+                  key={ch.id}
+                  person={ch}
+                  people={people}
+                  couplesByPerson={couplesByPerson}
+                  expanded={expanded}
+                  toggleExpanded={toggleExpanded}
+                  onSelectPerson={onSelectPerson}
+                  isAdmin={isAdmin}
+                />
+              ))}
+            </ul>
+          )}
+        </li>
+      );
+    }
+
+    function TreePersonDescNode({
+      person,
+      people,
+      couplesByPerson,
+      expanded,
+      toggleExpanded,
+      onSelectPerson,
+      isAdmin
+    }) {
+      const personCouples = couplesByPerson. get(person.id) || [];
+      const firstCouple = personCouples[0] || null;
+      const hasOwnCouple = Boolean(firstCouple);
+      const isExpanded = expanded.has("person_" + person.id);
+
+      return (
+        <li>
+          <div className="flex flex-col items-center gap-2">
+            <PersonCardMini person={person} onClick={() => onSelectPerson(person. id)} />
+
+            {hasOwnCouple && (
+              <button
+                className="text-xs px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700"
+                onClick={() => toggleExpanded("person_" + person.id)}
+              >
+                {isExpanded ? "Свернуть ▲" : "Показать ветку ▼"}
+              </button>
+            )}
+          </div>
+
+          {hasOwnCouple && isExpanded && (
+            <ul className="clearfix">
+              <TreeCoupleNode
+                couple={firstCouple}
+                people={people}
+                couplesByPerson={couplesByPerson}
+                expanded={expanded}
+                toggleExpanded={toggleExpanded}
+                onSelectPerson={onSelectPerson}
+                isAdmin={isAdmin}
+                onOpenAddChild={() => {}}
+              />
+            </ul>
+          )}
+        </li>
+      );
+    }
+
+    function PersonCardMini({ person, onClick }) {
+      if (! person) {
+        return (
+          <div className="personCard opacity-60 cursor-not-allowed">
+            <div className="avatar">? </div>
+            <div className="text-left min-w-0">
+              <div className="font-semibold text-slate-900 truncate">Нет данных</div>
+              <div className="text-xs text-slate-500">—</div>
+            </div>
+          </div>
+        );
+      }
+
+      const initials = ((person.firstName? .[0] || "? ") + (person.lastName?.[0] || "")).toUpperCase();
+      const genderIcon = person.gender === "F" ? "♀" : "♂";
+
+      return (
+        <div className="personCard" onClick={onClick} title="Открыть карточку">
+          {person.mainPhoto ?  (
+            <img className="avatar" src={person. mainPhoto} alt="Фото" />
+          ) : (
+            <div className="avatar">{initials}</div>
+          )}
+
+          <div className="text-left min-w-0">
+            <div className="font-semibold text-slate-900 truncate">{person.lastName} {person.firstName}</div>
+            <div className="text-xs text-slate-500 truncate">{person.middleName || " "}</div>
+            <div className="text-xs text-slate-600 flex items-center gap-2">
+              <span>{genderIcon}</span>
+              <span>{yearRange(person.birthDate, person.deathDate)}</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // =========================
+    // Modals
+    // =========================
+    function Modal({ children, onClose }) {
+      return (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-lg p-5 shadow-xl">
+            <div className="flex justify-end">
+              <button onClick={onClose} className="px-3 py-1 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm">
+                Закрыть
+              </button>
+            </div>
+            <div className="mt-3">{children}</div>
+          </div>
+        </div>
+      );
+    }
+
+    function Field({ label, children, className = "" }) {
+      return (
+        <div className={className}>
+          <label className="block text-sm font-medium text-slate-900 mb-1">{label}</label>
+          {children}
+        </div>
+      );
+    }
+
+    function PersonFormModal({ person, onClose, onSave }) {
+      const [form, setForm] = useState(person || {
+        id: uid(),
+        firstName: "",
+        lastName: "",
+        middleName:  "",
+        gender: "M",
+        birthDate: "",
+        deathDate: "",
+        description: "",
+        mainPhoto: "",
+        photos: []
+      });
+
+      const handleMainPhoto = (file) => {
+        if (! file) return;
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const dataUrl = String(reader.result || "");
+          setForm(prev => ({
+            ...prev,
+            mainPhoto: dataUrl,
+            photos: prev.photos?. length ? prev.photos :  (dataUrl ?  [dataUrl] : [])
+          }));
+        };
+        reader.readAsDataURL(file);
+      };
+
+      const submit = () => {
+        if (! form.lastName. trim() || !form.firstName.trim()) {
+          alert("Имя и фамилия обязательны");
+          return;
+        }
+        onSave(form);
+      };
+
+      return (
+        <Modal onClose={onClose}>
+          <div className="text-lg font-semibold mb-3">
+            {person ? "Редактировать человека" : "Добавить человека"}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <Field label="Фамилия *">
+              <input className="w-full border rounded-xl px-3 py-2"
+                     value={form.lastName}
+                     onChange={(e) => setForm(prev => ({...prev, lastName: e.target.value}))} />
+            </Field>
+            <Field label="Имя *">
+              <input className="w-full border rounded-xl px-3 py-2"
+                     value={form.firstName}
+                     onChange={(e) => setForm(prev => ({...prev, firstName: e.target.value}))} />
+            </Field>
+
+            <Field label="Отчество" className="md:col-span-2">
+              <input className="w-full border rounded-xl px-3 py-2"
+                     value={form.middleName}
+                     onChange={(e) => setForm(prev => ({...prev, middleName: e.target. value}))} />
+            </Field>
+
+            <Field label="Пол">
+              <select className="w-full border rounded-xl px-3 py-2"
+                      value={form.gender}
+                      onChange={(e) => setForm(prev => ({... prev, gender: e.target. value}))}>
+                <option value="M">Мужской</option>
+                <option value="F">Женский</option>
+              </select>
+            </Field>
+
+            <Field label="Дата рождения">
+              <input type="date" className="w-full border rounded-xl px-3 py-2"
+                     value={form.birthDate}
+                     onChange={(e) => setForm(prev => ({...prev, birthDate: e.target.value}))} />
+            </Field>
+
+            <Field label="Дата смерти">
+              <input type="date" className="w-full border rounded-xl px-3 py-2"
+                     value={form.deathDate}
+                     onChange={(e) => setForm(prev => ({...prev, deathDate: e.target.value}))} />
+            </Field>
+
+            <Field label="Описание" className="md:col-span-2">
+              <textarea rows="3" className="w-full border rounded-xl px-3 py-2"
+                        value={form.description}
+                        onChange={(e) => setForm(prev => ({...prev, description: e. target.value}))} />
+            </Field>
+
+            <Field label="Главное фото" className="md:col-span-2">
+              <input type="file" accept="image/*" className="w-full border rounded-xl px-3 py-2"
+                     onChange={(e) => handleMainPhoto(e.target. files? .[0])} />
+              {form.mainPhoto && (
+                <img src={form.mainPhoto} className="mt-2 w-28 h-28 rounded-xl object-cover border" alt="preview" />
+              )}
+            </Field>
+          </div>
+
+          <div className="mt-4 flex gap-2">
+            <button onClick={submit} className="flex-1 px-3 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700">
+              Сохранить
+            </button>
+            <button onClick={onClose} className="flex-1 px-3 py-2 rounded-xl bg-slate-200 text-slate-800 hover:bg-slate-300">
+              Отмена
+            </button>
+          </div>
+        </Modal>
+      );
+    }
+
+    function CoupleFormModal({ people, onClose, onSave }) {
+      const [form, setForm] = useState({
+        partner1Id: "",
+        partner2Id: "",
+        status: "married"
+      });
+
+      const submit = () => {
+        if (!form.partner1Id || !form.partner2Id) {
+          alert("Выбери двух людей");
+          return;
+        }
+        if (form.partner1Id === form.partner2Id) {
+          alert("Нужны два разных человека");
+          return;
+        }
+        onSave(form);
+      };
+
+      return (
+        <Modal onClose={onClose}>
+          <div className="text-lg font-semibold mb-3">Добавить пару</div>
+
+          <div className="space-y-3">
+            <Field label="Партнёр 1">
+              <select className="w-full border rounded-xl px-3 py-2"
+                      value={form. partner1Id}
+                      onChange={(e) => setForm(prev => ({...prev, partner1Id: e.target.value}))}>
+                <option value="">Выберите…</option>
+                {people. map(p => (
+                  <option key={p.id} value={p.id}>{safeName(p)}</option>
+                ))}
+              </select>
+            </Field>
+
+            <Field label="Партнёр 2">
+              <select className="w-full border rounded-xl px-3 py-2"
+                      value={form.partner2Id}
+                      onChange={(e) => setForm(prev => ({...prev, partner2Id: e.target. value}))}>
+                <option value="">Выберите…</option>
+                {people.map(p => (
+                  <option key={p.id} value={p.id}>{safeName(p)}</option>
+                ))}
+              </select>
+            </Field>
+
+            <Field label="Статус">
+              <select className="w-full border rounded-xl px-3 py-2"
+                      value={form.status}
+                      onChange={(e) => setForm(prev => ({...prev, status: e.target.value}))}>
+                <option value="married">Брак ❤️</option>
+                <option value="divorced">Развод 💔</option>
+              </select>
+            </Field>
+          </div>
+
+          <div className="mt-4 flex gap-2">
+            <button onClick={submit} className="flex-1 px-3 py-2 rounded-xl bg-sky-600 text-white hover: bg-sky-700">
+              Добавить
+            </button>
+            <button onClick={onClose} className="flex-1 px-3 py-2 rounded-xl bg-slate-200 text-slate-800 hover:bg-slate-300">
+              Отмена
+            </button>
+          </div>
+        </Modal>
+      );
+    }
+
+    function AddChildModal({ people, couple, onClose, onCreate, onAttachExisting }) {
+      const [mode, setMode] = useState("create");
+      const [existingId, setExistingId] = useState("");
+      const [child, setChild] = useState({
+        firstName: "",
+        lastName: "",
+        middleName: "",
+        gender: "M",
+        birthDate: "",
+        deathDate: "",
+        description: "",
+        mainPhoto: ""
+      });
+
+      const submit = () => {
+        if (mode === "create") {
+          if (!child.firstName. trim()) {
+            alert("Имя ребёнка обязательно");
+            return;
+          }
+          onCreate(child);
+        } else {
+          if (!existingId) {
+            alert("Выбери ребёнка");
+            return;
+          }
+          onAttachExisting(existingId);
+        }
+      };
+
+      return (
+        <Modal onClose={onClose}>
+          <div className="text-lg font-semibold mb-3">Добавить ребёнка</div>
+
+          <div className="mb-4 flex gap-2">
+            <button
+              className={"px-3 py-1 rounded-lg " + (mode === "create" ?  "bg-indigo-600 text-white" : "bg-slate-200 text-slate-800")}
+              onClick={() => setMode("create")}
+            >
+              Новый ребёнок
+            </button>
+            <button
+              className={"px-3 py-1 rounded-lg " + (mode === "attach" ? "bg-indigo-600 text-white" : "bg-slate-200 text-slate-800")}
+              onClick={() => setMode("attach")}
+            >
+              Из существующих
+            </button>
+          </div>
+
+          {mode === "create" ?  (
+            <div className="space-y-3">
+              <Field label="Имя *">
+                <input className="w-full border rounded-xl px-3 py-2"
+                       value={child.firstName}
+                       onChange={(e) => setChild(prev => ({... prev, firstName: e.target. value}))} />
+              </Field>
+              <Field label="Фамилия">
+                <input className="w-full border rounded-xl px-3 py-2"
+                       value={child.lastName}
+                       onChange={(e) => setChild(prev => ({...prev, lastName: e.target.value}))} />
+              </Field>
+              <Field label="Пол">
+                <select className="w-full border rounded-xl px-3 py-2"
+                        value={child.gender}
+                        onChange={(e) => setChild(prev => ({...prev, gender: e.target.value}))}>
+                  <option value="M">Мужской</option>
+                  <option value="F">Женский</option>
+                </select>
+              </Field>
+            </div>
+          ) : (
+            <Field label="Выбери ребёнка">
+              <select className="w-full border rounded-xl px-3 py-2"
+                      value={existingId}
+                      onChange={(e) => setExistingId(e.target.value)}>
+                <option value="">Выберите…</option>
+                {people.map(p => (
+                  <option key={p.id} value={p.id}>{safeName(p)}</option>
+                ))}
+              </select>
+            </Field>
+          )}
+
+          <div className="mt-4 flex gap-2">
+            <button onClick={submit} className="flex-1 px-3 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700">
+              Добавить
+            </button>
+            <button onClick={onClose} className="flex-1 px-3 py-2 rounded-xl bg-slate-200 text-slate-800 hover:bg-slate-300">
+              Отмена
+            </button>
+          </div>
+        </Modal>
+      );
+    }
+
+    function PersonDetailModal({
+      person,
+      isAdmin,
+      onClose,
+      onEdit,
+      onDelete,
+      couples,
+      people,
+      comments,
+      onDeleteComment,
+      newComment,
+      setNewComment,
+      onAddComment,
+      onAddAlbumPhoto,
+      onDeleteAlbumPhoto
+    }) {
+      const personCouples = couples.filter(c => c.partner1Id === person.id || c.partner2Id === person.id);
+
+      return (
+        <Modal onClose={onClose}>
+          <div className="flex items-start justify-between gap-4 mb-4">
+            <div>
+              <div className="text-2xl font-bold text-slate-900">{person.lastName} {person.firstName}</div>
+              <div className="text-sm text-slate-600">{person.middleName}</div>
+              <div className="text-xs text-slate-500 mt-1">
+                {person.gender === "F" ? "♀ Женщина" : "♂ Мужчина"}
+              </div>
+            </div>
+            {isAdmin && (
+              <div className="flex gap-1">
+                <button onClick={onEdit} className="px-2 py-1 rounded-lg bg-sky-600 text-white text-sm hover:bg-sky-700">
+                  Редактировать
+                </button>
+                <button onClick={onDelete} className="px-2 py-1 rounded-lg bg-rose-600 text-white text-sm hover:bg-rose-700">
+                  Удалить
+                </button>
+              </div>
+            )}
+          </div>
+
+          {person.mainPhoto && (
+            <img src={person.mainPhoto} className="w-full h-48 object-cover rounded-xl mb-4" alt="Фото" />
+          )}
+
+          <div className="space-y-4 max-h-96 overflow-y-auto">
+            {person.birthDate && (
+              <div className="text-sm">
+                <span className="font-semibold text-slate-900">Рождение:</span>
+                <span className="text-slate-600 ml-2">{new Date(person.birthDate).toLocaleDateString("ru-RU")}</span>
+              </div>
+            )}
+
+            {person.deathDate && (
+              <div className="text-sm">
+                <span className="font-semibold text-slate-900">Смерть:</span>
+                <span className="text-slate-600 ml-2">{new Date(person.deathDate).toLocaleDateString("ru-RU")}</span>
+              </div>
+            )}
+
+            {person.description && (
+              <div className="text-sm">
+                <span className="font-semibold text-slate-900">Описание:</span>
+                <p className="text-slate-600 mt-1">{person.description}</p>
+              </div>
+            )}
+
+            {personCouples.length > 0 && (
+              <div className="text-sm">
+                <span className="font-semibold text-slate-900">Партнёры:</span>
+                <ul className="mt-1 space-y-1">
+                  {personCouples.map(c => {
+                    const partner = c.partner1Id === person.id ? people.find(p => p.id === c.partner2Id) : people.find(p => p.id === c.partner1Id);
+                    return (
+                      <li key={c.id} className="text-slate-600">
+                        {partner ? safeName(partner) : "?"} {c.status === "divorced" ? "💔" : "❤️"}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
+
+            {person.photos?. length > 0 && (
+              <div className="text-sm">
+                <span className="font-semibold text-slate-900">Альбом: </span>
+                <div className="grid grid-cols-3 gap-2 mt-2">
+                  {person.photos.map((photo, idx) => (
+                    <div key={idx} className="relative group">
+                      <img src={photo} className="w-full h-24 object-cover rounded-lg" alt={`Photo ${idx + 1}`} />
+                      {isAdmin && (
+                        <button
+                          onClick={() => onDeleteAlbumPhoto(idx)}
+                          className="absolute top-1 right-1 bg-rose-600 text-white rounded px-2 py-1 text-xs opacity-0 group-hover:opacity-100"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {isAdmin && (
+              <Field label="Добавить фото в альбом">
+                <input type="file" accept="image/*" className="w-full border rounded-xl px-3 py-2"
+                       onChange={(e) => onAddAlbumPhoto(e. target.files?.[0])} />
+              </Field>
+            )}
+
+            <div className="border-t pt-4">
+              <div className="font-semibold text-slate-900 mb-2">Комментарии ({comments.length})</div>
+
+              <div className="space-y-2 mb-3">
+                {comments.map(c => (
+                  <div key={c.id} className="bg-slate-100 rounded-lg p-2 text-sm">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-semibold text-slate-900">{c.author}</span>
+                      {isAdmin && (
+                        <button
+                          onClick={() => onDeleteComment(c.id)}
+                          className="text-rose-600 hover:text-rose-700 text-xs"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                    <div className="text-slate-600">{c.text}</div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      {new Date(c.date).toLocaleDateString("ru-RU", { hour: "2-digit", minute: "2-digit" })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  className="flex-1 border rounded-xl px-3 py-2 text-sm"
+                  placeholder="Написать комментарий…"
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && onAddComment()}
+                />
+                <button
+                  onClick={onAddComment}
+                  className="px-3 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 text-sm"
+                >
+                  Отправить
+                </button>
+              </div>
+            </div>
+          </div>
+        </Modal>
+      );
+    }
+
+    // =========================
+    // Render
+    // =========================
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(<App />);
+  </script>
 </body>
 </html>
