@@ -13,7 +13,7 @@
   <!-- Tailwind -->
   <script src="https://cdn.tailwindcss.com"></script>
 
-  <!-- Firebase compat (лучше всего с UMD/Babel на GitHub Pages) -->
+  <!-- Firebase compat -->
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
@@ -28,7 +28,7 @@
       list-style: none;
       position: relative;
       padding: 24px 10px 0 10px;
-      min-width: 240px;
+      min-width: 260px;
     }
 
     .tree li::before,
@@ -76,15 +76,12 @@
       border-radius: 18px;
       background: #fff;
       box-shadow: 0 10px 28px rgba(15,23,42,0.08);
-      max-width: 320px;
+      max-width: 340px;
       cursor: pointer;
       user-select: none;
       transition: transform .15s ease, box-shadow .15s ease;
     }
-    .personCard:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 16px 40px rgba(15,23,42,0.12);
-    }
+    .personCard:hover { transform: translateY(-2px); box-shadow: 0 16px 40px rgba(15,23,42,0.12); }
 
     .avatar {
       width: 46px;
@@ -102,45 +99,24 @@
       box-shadow: 0 10px 25px rgba(79,70,229,0.25);
     }
 
-    .coupleRow {
-      display: inline-flex;
-      align-items: center;
-      gap: 10px;
-      position: relative;
-    }
+    .coupleRow { display: inline-flex; align-items: center; gap: 10px; position: relative; }
     .coupleMid {
-      width: 38px;
-      height: 38px;
-      border-radius: 999px;
-      border: 2px solid #e2e8f0;
-      background: #fff;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
+      width: 38px; height: 38px; border-radius: 999px;
+      border: 2px solid #e2e8f0; background: #fff;
+      display: inline-flex; align-items: center; justify-content: center;
       font-size: 18px;
       box-shadow: 0 8px 20px rgba(15,23,42,0.10);
       cursor: pointer;
       user-select: none;
       transition: transform .15s ease, box-shadow .15s ease, opacity .15s ease;
     }
-    .coupleMid:not([aria-disabled="true"]):hover {
-      transform: scale(1.08);
-      box-shadow: 0 12px 26px rgba(15,23,42,0.16);
-    }
+    .coupleMid:not([aria-disabled="true"]):hover { transform: scale(1.08); box-shadow: 0 12px 26px rgba(15,23,42,0.16); }
     .coupleMid[aria-disabled="true"] { cursor: default; opacity: 0.55; }
 
-    .coupleDownLine {
-      position: relative;
-      display: inline-block;
-    }
+    .coupleDownLine { position: relative; display: inline-block; }
     .coupleDownLine::after {
-      content: "";
-      position: absolute;
-      left: 50%;
-      transform: translateX(-50%);
-      bottom: -16px;
-      height: 16px;
-      border-left: 2px solid #cbd5e1;
+      content: ""; position: absolute; left: 50%; transform: translateX(-50%);
+      bottom: -16px; height: 16px; border-left: 2px solid #cbd5e1;
     }
 
     .clearfix::after { content: ""; display: table; clear: both; }
@@ -164,7 +140,7 @@
     const { useEffect, useMemo, useState } = React;
 
     // =========================
-    // FIREBASE CONFIG (замени на свои, если нужно)
+    // FIREBASE CONFIG
     // =========================
     const firebaseConfig = {
       apiKey: "AIzaSyDJKvh7T9MJGXHWoA3LsESEXWsQxiIbFd4",
@@ -232,7 +208,9 @@
         [people, selectedPersonId]
       );
 
-      const [expanded, setExpanded] = useState(new Set());
+      // отдельно: сворачивать поколения (ветки)
+      const [expandedCouples, setExpandedCouples] = useState(new Set());
+      const [expandedPersons, setExpandedPersons] = useState(new Set());
 
       const [showPersonForm, setShowPersonForm] = useState(false);
       const [editingPerson, setEditingPerson] = useState(null);
@@ -264,8 +242,6 @@
           setCouples(data);
         });
 
-        // Комменты лучше читать по personId, но для простоты (и малого объёма) — один листенер.
-        // Если станет много — переведём на подгрузку по выбранному человеку.
         const u3 = db.collection("comments").onSnapshot((snapshot) => {
           const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort(sortByDateDesc);
           setComments(data);
@@ -297,7 +273,6 @@
             return;
           }
 
-          // Если нет пользователя — не грузим данные, пока не будет anon/admin.
           setIsAdmin(false);
           stopListeners();
           setPeople([]);
@@ -364,10 +339,8 @@
         if (!isAdmin) return;
         if (!confirm("Удалить человека? Связи и комментарии будут очищены.")) return;
 
-        // 1) delete person
         await db.collection("people").doc(personId).delete();
 
-        // 2) fix couples
         const couplesSnap = await db.collection("couples").get();
         for (const coupleDoc of couplesSnap.docs) {
           const couple = coupleDoc.data();
@@ -385,7 +358,6 @@
           }
         }
 
-        // 3) delete comments for this person
         const commentsSnap = await db.collection("comments").where("personId", "==", personId).get();
         for (const commentDoc of commentsSnap.docs) {
           await db.collection("comments").doc(commentDoc.id).delete();
@@ -408,7 +380,7 @@
         };
         await db.collection("couples").doc(newId).set(c);
         setShowCoupleForm(false);
-        setExpanded(prev => new Set([...prev, newId]));
+        setExpandedCouples(prev => new Set([...prev, newId]));
       };
 
       const deleteCouple = async (coupleId) => {
@@ -503,10 +475,18 @@
         return map;
       }, [couples]);
 
-      const toggleExpanded = (key) => {
-        setExpanded(prev => {
+      const toggleCoupleExpanded = (coupleId) => {
+        setExpandedCouples(prev => {
           const next = new Set(prev);
-          next.has(key) ? next.delete(key) : next.add(key);
+          next.has(coupleId) ? next.delete(coupleId) : next.add(coupleId);
+          return next;
+        });
+      };
+
+      const togglePersonExpanded = (personId) => {
+        setExpandedPersons(prev => {
+          const next = new Set(prev);
+          next.has(personId) ? next.delete(personId) : next.add(personId);
           return next;
         });
       };
@@ -530,7 +510,7 @@
 
         await updateCouple(coupleId, { childrenIds: nextChildren });
 
-        setExpanded(prev => new Set([...prev, coupleId]));
+        setExpandedCouples(prev => new Set([...prev, coupleId]));
         closeAddChild();
       };
 
@@ -541,7 +521,7 @@
         const nextChildren = [...new Set([...(couple?.childrenIds || []), childId])];
 
         await updateCouple(coupleId, { childrenIds: nextChildren });
-        setExpanded(prev => new Set([...prev, coupleId]));
+        setExpandedCouples(prev => new Set([...prev, coupleId]));
         closeAddChild();
       };
 
@@ -624,10 +604,6 @@
                   </Field>
                 </div>
 
-                <div className="text-xs text-slate-500 mt-3">
-                  Используй Email/Password из Firebase Authentication
-                </div>
-
                 <div className="mt-4 flex gap-2">
                   <button onClick={handleAdminLogin} className="flex-1 px-3 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 transition-all">
                     Войти
@@ -707,7 +683,9 @@
                 <div>
                   <div className="text-lg font-semibold text-slate-900">Дерево сверху вниз</div>
                   <div className="text-xs text-slate-500">
-                    {isAdmin ? "❤️/💔 — узел пары. Клик → добавить ребёнка. Карточка → детали." : "Карточка → детали. Гость может писать комментарии."}
+                    {isAdmin
+                      ? "Нажми на «Дети/Потомки», чтобы свернуть/развернуть поколения. ❤️/💔 — добавить ребёнка."
+                      : "Нажимай «Дети/Потомки», чтобы свернуть/развернуть поколения. Карточка → детали."}
                   </div>
                 </div>
 
@@ -732,13 +710,19 @@
                         key={c.id}
                         couple={c}
                         people={people}
-                        expanded={expanded}
-                        toggleExpanded={toggleExpanded}
+                        couples={couples}
+                        couplesByPerson={couplesByPerson}
+                        expandedCouples={expandedCouples}
+                        expandedPersons={expandedPersons}
+                        toggleCoupleExpanded={toggleCoupleExpanded}
+                        togglePersonExpanded={togglePersonExpanded}
                         onSelectPerson={(id) => setSelectedPersonId(id)}
                         isAdmin={isAdmin}
                         onOpenAddChild={() => openAddChild(c.id)}
                         onDeleteCouple={() => deleteCouple(c.id)}
                         onDetachChild={(childId) => detachChild(c.id, childId)}
+                        depth={0}
+                        path={new Set()}
                       />
                     ))}
                   </ul>
@@ -790,7 +774,6 @@
                   />
                 </Field>
               </div>
-              <div className="text-xs text-slate-500 mt-3">Если ты уже вошёл как гость — админ-вход просто “поверх”.</div>
               <div className="mt-4 flex gap-2">
                 <button onClick={handleAdminLogin} className="flex-1 px-3 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 transition-all">Войти</button>
                 <button onClick={() => setShowLogin(false)} className="flex-1 px-3 py-2 rounded-xl bg-slate-200 text-slate-800 hover:bg-slate-300 transition-all">Отмена</button>
@@ -840,24 +823,26 @@
         gender: data.gender || "M",
         birthDate: data.birthDate || "",
         deathDate: data.deathDate || "",
-        description: data.description || "",
+        description: data.description || "", // коротко
+        biography: data.biography || "",     // автобиография (длинный текст)
         mainPhoto,
         photos,
       };
-      // чтобы не держать огромные массивы пустых строк
       out.photos = (out.photos || []).filter(Boolean);
       if (out.mainPhoto && !out.photos.includes(out.mainPhoto)) out.photos = [out.mainPhoto, ...out.photos];
       return out;
     }
 
     // =========================
-    // Tree Components
+    // Tree Components (recursive)
     // =========================
     function TreeCoupleNode({
-      couple, people,
-      expanded, toggleExpanded,
+      couple, people, couples, couplesByPerson,
+      expandedCouples, expandedPersons,
+      toggleCoupleExpanded, togglePersonExpanded,
       onSelectPerson, isAdmin, onOpenAddChild,
-      onDeleteCouple, onDetachChild
+      onDeleteCouple, onDetachChild,
+      depth, path
     }) {
       const p1 = people.find(p => p.id === couple.partner1Id) || null;
       const p2 = people.find(p => p.id === couple.partner2Id) || null;
@@ -868,7 +853,12 @@
         .map(id => people.find(p => p.id === id))
         .filter(Boolean);
 
-      const isExpanded = expanded.has(couple.id);
+      const isExpanded = expandedCouples.has(couple.id);
+
+      // защита от циклов: если партнёры уже были в пути — не углубляемся
+      const nextPath = new Set(path);
+      if (p1?.id) nextPath.add(p1.id);
+      if (p2?.id) nextPath.add(p2.id);
 
       return (
         <li>
@@ -890,9 +880,9 @@
               {children.length > 0 && (
                 <button
                   className="text-xs px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700"
-                  onClick={() => toggleExpanded(couple.id)}
+                  onClick={() => toggleCoupleExpanded(couple.id)}
                 >
-                  {isExpanded ? "Свернуть ▲" : `Дети (${children.length}) ▼`}
+                  {isExpanded ? "Свернуть детей ▲" : `Дети (${children.length}) ▼`}
                 </button>
               )}
 
@@ -911,83 +901,90 @@
           {children.length > 0 && isExpanded && (
             <ul className="clearfix">
               {children.map(ch => (
-                <TreePersonDescNode
+                <TreePersonNode
                   key={ch.id}
                   person={ch}
                   people={people}
-                  expanded={expanded}
-                  toggleExpanded={toggleExpanded}
+                  couples={couples}
+                  couplesByPerson={couplesByPerson}
+                  expandedCouples={expandedCouples}
+                  expandedPersons={expandedPersons}
+                  toggleCoupleExpanded={toggleCoupleExpanded}
+                  togglePersonExpanded={togglePersonExpanded}
                   onSelectPerson={onSelectPerson}
                   isAdmin={isAdmin}
+                  onOpenAddChild={onOpenAddChild}
+                  onDetachChild={onDetachChild}
+                  depth={depth + 1}
+                  path={nextPath}
                 />
               ))}
-
-              {isAdmin && (
-                <li>
-                  <div className="flex flex-col items-center gap-2 mt-2">
-                    <button
-                      className="px-3 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm"
-                      onClick={onOpenAddChild}
-                    >
-                      + Добавить ребёнка
-                    </button>
-
-                    <div className="text-xs text-slate-500 max-w-xs">
-                      Если ребёнок добавлен ошибочно — открой пару и удаляй ребёнка в деталях пары (ниже).
-                    </div>
-                  </div>
-                </li>
-              )}
             </ul>
-          )}
-
-          {isAdmin && children.length > 0 && (
-            <div className="mt-3 bg-slate-50 border rounded-2xl p-3 text-left inline-block">
-              <div className="text-xs font-semibold text-slate-900 mb-2">Дети в этой паре (быстрое удаление связи):</div>
-              <div className="flex flex-wrap gap-2">
-                {children.map(ch => (
-                  <div key={ch.id} className="inline-flex items-center gap-2 bg-white border rounded-xl px-2 py-1">
-                    <button className="text-xs text-slate-700 hover:text-slate-900" onClick={() => onSelectPerson(ch.id)}>
-                      {safeName(ch)}
-                    </button>
-                    <button
-                      className="text-xs text-rose-600 hover:text-rose-700"
-                      title="Отвязать ребёнка от пары"
-                      onClick={() => onDetachChild(ch.id)}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
           )}
         </li>
       );
     }
 
-    function TreePersonDescNode({ person, people, expanded, toggleExpanded, onSelectPerson, isAdmin }) {
-      // Ветка: ищем первую пару, где этот человек — партнер
-      // (если будет нужно: можно расширить до нескольких браков)
-      const couplesAsPartner = useMemo(() => {
-        // важно: useMemo внутри компонента ок, но зависимостей нет — пропустим
-        return null;
-      }, []);
+    function TreePersonNode({
+      person, people, couples, couplesByPerson,
+      expandedCouples, expandedPersons,
+      toggleCoupleExpanded, togglePersonExpanded,
+      onSelectPerson, isAdmin, depth, path
+    }) {
+      const personCouples = couplesByPerson.get(person.id) || [];
+      const canExpand = personCouples.length > 0 && !path.has(person.id); // path содержит уже, если мы пришли в цикл
 
-      // вычислим без memo, объёмы обычно небольшие
-      const allCouples = window.__FT_COUPLES__ || null; // fallback (не используем)
-      // для корректности ветку строим через "person_" ключ, но сам couple ищем выше уровнем не можем.
-      // Упростим: кнопка "Показать ветку" скрыта, чтобы не вводить в заблуждение.
-      // Основная навигация — от rootCouples и раскрытие детей.
+      const isExpanded = expandedPersons.has(person.id);
+
+      const showExpand = personCouples.length > 0;
 
       return (
         <li>
           <div className="flex flex-col items-center gap-2">
             <PersonCardMini person={person} onClick={() => onSelectPerson(person.id)} />
-            <div className="text-[11px] text-slate-500">
-              {yearRange(person.birthDate, person.deathDate)}
-            </div>
+
+            <div className="text-[11px] text-slate-500">{yearRange(person.birthDate, person.deathDate)}</div>
+
+            {showExpand && (
+              <button
+                className="text-xs px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700"
+                onClick={() => togglePersonExpanded(person.id)}
+                title="Свернуть/развернуть потомков"
+              >
+                {isExpanded ? "Свернуть потомков ▲" : `Потомки ▼`}
+              </button>
+            )}
+
+            {showExpand && !canExpand && (
+              <div className="text-[11px] text-slate-400">Цикл в данных — ветка ограничена</div>
+            )}
           </div>
+
+          {showExpand && isExpanded && canExpand && (
+            <ul className="clearfix">
+              {personCouples.map(c => (
+                <TreeCoupleNode
+                  key={c.id}
+                  couple={c}
+                  people={people}
+                  couples={couples}
+                  couplesByPerson={couplesByPerson}
+                  expandedCouples={expandedCouples}
+                  expandedPersons={expandedPersons}
+                  toggleCoupleExpanded={toggleCoupleExpanded}
+                  togglePersonExpanded={togglePersonExpanded}
+                  onSelectPerson={onSelectPerson}
+                  isAdmin={isAdmin}
+                  // добавление ребёнка — только на уровне пары (внутри CoupleNode кнопка)
+                  onOpenAddChild={() => {}}
+                  onDeleteCouple={() => {}}
+                  onDetachChild={() => {}}
+                  depth={depth + 1}
+                  path={new Set([...path, person.id])}
+                />
+              ))}
+            </ul>
+          )}
         </li>
       );
     }
@@ -1048,6 +1045,21 @@
       );
     }
 
+    function Lightbox({ src, onClose }) {
+      return (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60] p-4" onClick={onClose}>
+          <div className="max-w-5xl w-full" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-end mb-2">
+              <button onClick={onClose} className="px-3 py-2 rounded-xl bg-white/10 text-white hover:bg-white/20">
+                Закрыть
+              </button>
+            </div>
+            <img src={src} alt="Фото" className="w-full max-h-[85vh] object-contain rounded-2xl shadow-2xl bg-black" />
+          </div>
+        </div>
+      );
+    }
+
     function Field({ label, children, className = "" }) {
       return (
         <div className={className}>
@@ -1067,6 +1079,7 @@
         birthDate: "",
         deathDate: "",
         description: "",
+        biography: "",
         mainPhoto: "",
         photos: []
       });
@@ -1122,8 +1135,13 @@
             <Field label="Дата смерти">
               <input type="date" className="w-full border rounded-xl px-3 py-2" value={form.deathDate} onChange={(e) => setForm(prev => ({...prev, deathDate: e.target.value}))} />
             </Field>
-            <Field label="Описание" className="md:col-span-2">
+
+            <Field label="Короткое описание" className="md:col-span-2">
               <textarea rows="3" className="w-full border rounded-xl px-3 py-2" value={form.description} onChange={(e) => setForm(prev => ({...prev, description: e.target.value}))} />
+            </Field>
+
+            <Field label="Автобиография" className="md:col-span-2">
+              <textarea rows="6" className="w-full border rounded-xl px-3 py-2" placeholder="Можно писать большим текстом" value={form.biography} onChange={(e) => setForm(prev => ({...prev, biography: e.target.value}))} />
             </Field>
 
             <Field label="Главное фото" className="md:col-span-2">
@@ -1201,6 +1219,7 @@
         birthDate: "",
         deathDate: "",
         description: "",
+        biography: "",
         mainPhoto: ""
       });
 
@@ -1244,17 +1263,28 @@
               <Field label="Фамилия">
                 <input className="w-full border rounded-xl px-3 py-2" value={child.lastName} onChange={(e) => setChild(prev => ({...prev, lastName: e.target.value}))} />
               </Field>
+
+              <Field label="Отчество">
+                <input className="w-full border rounded-xl px-3 py-2" value={child.middleName} onChange={(e) => setChild(prev => ({...prev, middleName: e.target.value}))} />
+              </Field>
+
               <Field label="Пол">
                 <select className="w-full border rounded-xl px-3 py-2" value={child.gender} onChange={(e) => setChild(prev => ({...prev, gender: e.target.value}))}>
                   <option value="M">Мужской</option>
                   <option value="F">Женский</option>
                 </select>
               </Field>
+
               <Field label="Дата рождения">
                 <input type="date" className="w-full border rounded-xl px-3 py-2" value={child.birthDate} onChange={(e) => setChild(prev => ({...prev, birthDate: e.target.value}))} />
               </Field>
+
               <Field label="Описание" className="md:col-span-2">
                 <textarea rows="2" className="w-full border rounded-xl px-3 py-2" value={child.description} onChange={(e) => setChild(prev => ({...prev, description: e.target.value}))} />
+              </Field>
+
+              <Field label="Автобиография" className="md:col-span-2">
+                <textarea rows="5" className="w-full border rounded-xl px-3 py-2" value={child.biography} onChange={(e) => setChild(prev => ({...prev, biography: e.target.value}))} />
               </Field>
             </div>
           ) : (
@@ -1286,148 +1316,170 @@
       newComment, setNewComment, onAddComment,
       onAddAlbumPhoto, onDeleteAlbumPhoto
     }) {
+      const [lightboxSrc, setLightboxSrc] = useState("");
+
       const personCouples = couples.filter(c => c.partner1Id === person.id || c.partner2Id === person.id);
 
       return (
-        <Modal onClose={onClose}>
-          <div className="flex items-start justify-between gap-4 mb-4">
-            <div>
-              <div className="text-2xl font-bold text-slate-900">{person.lastName} {person.firstName}</div>
-              <div className="text-sm text-slate-600">{person.middleName || ""}</div>
-              <div className="text-xs text-slate-500 mt-1">
-                {person.gender === "F" ? "♀ Женщина" : "♂ Мужчина"} • {yearRange(person.birthDate, person.deathDate)}
-              </div>
-            </div>
-
-            {isAdmin && (
-              <div className="flex gap-2">
-                <button onClick={onEdit} className="px-3 py-2 rounded-xl bg-sky-600 text-white text-sm hover:bg-sky-700">
-                  Редактировать
-                </button>
-                <button onClick={onDelete} className="px-3 py-2 rounded-xl bg-rose-600 text-white text-sm hover:bg-rose-700">
-                  Удалить
-                </button>
-              </div>
-            )}
-          </div>
-
-          {person.mainPhoto && (
-            <img src={person.mainPhoto} className="w-full h-52 object-cover rounded-2xl mb-4 border" alt="Фото" />
-          )}
-
-          <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {person.birthDate && (
-                <div className="text-sm bg-slate-50 border rounded-2xl p-3">
-                  <div className="font-semibold text-slate-900">Рождение</div>
-                  <div className="text-slate-600 mt-1">{new Date(person.birthDate).toLocaleDateString("ru-RU")}</div>
+        <>
+          <Modal onClose={onClose}>
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <div>
+                <div className="text-2xl font-bold text-slate-900">{person.lastName} {person.firstName}</div>
+                <div className="text-sm text-slate-600">{person.middleName || ""}</div>
+                <div className="text-xs text-slate-500 mt-1">
+                  {person.gender === "F" ? "♀ Женщина" : "♂ Мужчина"} • {yearRange(person.birthDate, person.deathDate)}
                 </div>
-              )}
-              {person.deathDate && (
-                <div className="text-sm bg-slate-50 border rounded-2xl p-3">
-                  <div className="font-semibold text-slate-900">Смерть</div>
-                  <div className="text-slate-600 mt-1">{new Date(person.deathDate).toLocaleDateString("ru-RU")}</div>
+              </div>
+
+              {isAdmin && (
+                <div className="flex gap-2">
+                  <button onClick={onEdit} className="px-3 py-2 rounded-xl bg-sky-600 text-white text-sm hover:bg-sky-700">
+                    Редактировать
+                  </button>
+                  <button onClick={onDelete} className="px-3 py-2 rounded-xl bg-rose-600 text-white text-sm hover:bg-rose-700">
+                    Удалить
+                  </button>
                 </div>
               )}
             </div>
 
-            {person.description && (
-              <div className="text-sm bg-slate-50 border rounded-2xl p-3">
-                <div className="font-semibold text-slate-900">Описание</div>
-                <p className="text-slate-600 mt-1 whitespace-pre-wrap">{person.description}</p>
-              </div>
+            {person.mainPhoto && (
+              <img
+                src={person.mainPhoto}
+                className="w-full h-52 object-cover rounded-2xl mb-4 border cursor-zoom-in"
+                alt="Фото"
+                onClick={() => setLightboxSrc(person.mainPhoto)}
+                title="Открыть на весь экран"
+              />
             )}
 
-            {personCouples.length > 0 && (
-              <div className="text-sm bg-slate-50 border rounded-2xl p-3">
-                <div className="font-semibold text-slate-900">Партнёры</div>
-                <ul className="mt-2 space-y-1">
-                  {personCouples.map(c => {
-                    const partner = c.partner1Id === person.id
-                      ? people.find(p => p.id === c.partner2Id)
-                      : people.find(p => p.id === c.partner1Id);
-
-                    return (
-                      <li key={c.id} className="text-slate-700 flex items-center justify-between">
-                        <span>{partner ? safeName(partner) : "?"} {c.status === "divorced" ? "💔" : "❤️"}</span>
-                      </li>
-                    );
-                  })}
-                </ul>
+            <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {person.birthDate && (
+                  <div className="text-sm bg-slate-50 border rounded-2xl p-3">
+                    <div className="font-semibold text-slate-900">Рождение</div>
+                    <div className="text-slate-600 mt-1">{new Date(person.birthDate).toLocaleDateString("ru-RU")}</div>
+                  </div>
+                )}
+                {person.deathDate && (
+                  <div className="text-sm bg-slate-50 border rounded-2xl p-3">
+                    <div className="font-semibold text-slate-900">Смерть</div>
+                    <div className="text-slate-600 mt-1">{new Date(person.deathDate).toLocaleDateString("ru-RU")}</div>
+                  </div>
+                )}
               </div>
-            )}
 
-            {(person.photos || []).length > 0 && (
-              <div className="text-sm bg-slate-50 border rounded-2xl p-3">
-                <div className="font-semibold text-slate-900">Альбом</div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-3">
-                  {(person.photos || []).map((photo, idx) => (
-                    <div key={idx} className="relative group">
-                      <img src={photo} className="w-full h-32 object-cover rounded-xl border bg-white" alt={"Photo " + (idx + 1)} />
-                      {isAdmin && (
-                        <button
-                          onClick={() => onDeleteAlbumPhoto(idx)}
-                          className="absolute top-2 right-2 bg-rose-600 text-white rounded-lg px-2 py-1 text-xs opacity-0 group-hover:opacity-100 transition"
-                          title="Удалить фото"
-                        >
-                          ✕
-                        </button>
-                      )}
+              {person.description && (
+                <div className="text-sm bg-slate-50 border rounded-2xl p-3">
+                  <div className="font-semibold text-slate-900">Описание</div>
+                  <p className="text-slate-600 mt-1 whitespace-pre-wrap">{person.description}</p>
+                </div>
+              )}
+
+              {person.biography && (
+                <div className="text-sm bg-slate-50 border rounded-2xl p-3">
+                  <div className="font-semibold text-slate-900">Автобиография</div>
+                  <p className="text-slate-700 mt-1 whitespace-pre-wrap leading-relaxed">{person.biography}</p>
+                </div>
+              )}
+
+              {personCouples.length > 0 && (
+                <div className="text-sm bg-slate-50 border rounded-2xl p-3">
+                  <div className="font-semibold text-slate-900">Партнёры</div>
+                  <ul className="mt-2 space-y-1">
+                    {personCouples.map(c => {
+                      const partner = c.partner1Id === person.id
+                        ? people.find(p => p.id === c.partner2Id)
+                        : people.find(p => p.id === c.partner1Id);
+
+                      return (
+                        <li key={c.id} className="text-slate-700 flex items-center justify-between">
+                          <span>{partner ? safeName(partner) : "?"} {c.status === "divorced" ? "💔" : "❤️"}</span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+
+              {(person.photos || []).length > 0 && (
+                <div className="text-sm bg-slate-50 border rounded-2xl p-3">
+                  <div className="font-semibold text-slate-900">Альбом</div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-3">
+                    {(person.photos || []).map((photo, idx) => (
+                      <div key={idx} className="relative group">
+                        <img
+                          src={photo}
+                          className="w-full h-32 object-cover rounded-xl border bg-white cursor-zoom-in"
+                          alt={"Photo " + (idx + 1)}
+                          onClick={() => setLightboxSrc(photo)}
+                          title="Открыть на весь экран"
+                        />
+                        {isAdmin && (
+                          <button
+                            onClick={() => onDeleteAlbumPhoto(idx)}
+                            className="absolute top-2 right-2 bg-rose-600 text-white rounded-lg px-2 py-1 text-xs opacity-0 group-hover:opacity-100 transition"
+                            title="Удалить фото"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-2">Нажми на фото — откроется на весь экран.</div>
+                </div>
+              )}
+
+              {isAdmin && (
+                <div className="text-sm bg-slate-50 border rounded-2xl p-3">
+                  <div className="font-semibold text-slate-900 mb-2">Добавить фото в альбом</div>
+                  <input type="file" accept="image/*" className="w-full border rounded-xl px-3 py-2 bg-white" onChange={(e) => onAddAlbumPhoto(e.target.files?.[0])} />
+                </div>
+              )}
+
+              <div className="border-t pt-4">
+                <div className="font-semibold text-slate-900 mb-2">Комментарии ({comments.length})</div>
+
+                <div className="space-y-2 mb-3">
+                  {comments.map(c => (
+                    <div key={c.id} className="bg-slate-100 rounded-2xl p-3 text-sm border">
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <span className="font-semibold text-slate-900">{c.author || "—"}</span>
+                        {isAdmin && (
+                          <button onClick={() => onDeleteComment(c.id)} className="text-rose-600 hover:text-rose-700 text-xs" title="Удалить комментарий">
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                      <div className="text-slate-700 whitespace-pre-wrap">{c.text}</div>
+                      <div className="text-xs text-slate-500 mt-2">
+                        {c.date ? new Date(c.date).toLocaleString("ru-RU", { year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit" }) : ""}
+                      </div>
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
 
-            {isAdmin && (
-              <div className="text-sm bg-slate-50 border rounded-2xl p-3">
-                <div className="font-semibold text-slate-900 mb-2">Добавить фото в альбом</div>
-                <input type="file" accept="image/*" className="w-full border rounded-xl px-3 py-2 bg-white" onChange={(e) => onAddAlbumPhoto(e.target.files?.[0])} />
-              </div>
-            )}
-
-            <div className="border-t pt-4">
-              <div className="font-semibold text-slate-900 mb-2">Комментарии ({comments.length})</div>
-
-              <div className="space-y-2 mb-3">
-                {comments.map(c => (
-                  <div key={c.id} className="bg-slate-100 rounded-2xl p-3 text-sm border">
-                    <div className="flex items-center justify-between gap-2 mb-1">
-                      <span className="font-semibold text-slate-900">{c.author || "—"}</span>
-                      {isAdmin && (
-                        <button onClick={() => onDeleteComment(c.id)} className="text-rose-600 hover:text-rose-700 text-xs" title="Удалить комментарий">
-                          ✕
-                        </button>
-                      )}
-                    </div>
-                    <div className="text-slate-700 whitespace-pre-wrap">{c.text}</div>
-                    <div className="text-xs text-slate-500 mt-2">
-                      {c.date ? new Date(c.date).toLocaleString("ru-RU", { year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit" }) : ""}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  className="flex-1 border rounded-xl px-3 py-2 text-sm bg-white"
-                  placeholder="Написать комментарий…"
-                  value={newComment}
-                  onChange={(e) => setNewComment(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && onAddComment()}
-                />
-                <button onClick={onAddComment} className="px-3 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 text-sm">
-                  Отправить
-                </button>
-              </div>
-
-              <div className="text-xs text-slate-500 mt-2">
-                Гость пишет как “Гость” (анонимный Firebase UID). Админ может удалять комментарии.
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    className="flex-1 border rounded-xl px-3 py-2 text-sm bg-white"
+                    placeholder="Написать комментарий…"
+                    value={newComment}
+                    onChange={(e) => setNewComment(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && onAddComment()}
+                  />
+                  <button onClick={onAddComment} className="px-3 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 text-sm">
+                    Отправить
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        </Modal>
+          </Modal>
+
+          {lightboxSrc && <Lightbox src={lightboxSrc} onClose={() => setLightboxSrc("")} />}
+        </>
       );
     }
 
@@ -1437,3 +1489,4 @@
   </script>
 </body>
 </html>
+
