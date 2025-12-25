@@ -8,7 +8,7 @@
   <!-- React (UMD) + Babel для GitHub Pages -->
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min. js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
   <!-- Tailwind -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -137,7 +137,7 @@
 
     .coupleRowChild::after{ display:none; }
 
-. coupleMid {
+    . coupleMid {
       width: 38px; height: 38px; border-radius: 999px;
       border: 2px solid #e2e8f0; background: #fff;
       display: inline-flex; align-items: center; justify-content: center;
@@ -203,36 +203,36 @@
       .personCard .text-xs { font-size: 9px; }
     }
   
+    
     /* Узел ребёнка: якорь = карточка ребёнка по центру */
-.personNodeMain{
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  justify-content: center;
-}
+    .personNodeMain{
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      justify-content: center;
+    }
 
-/* Блок пар ребёнка — строго под ребёнком, не расширяет узел в сторону */
-.personNodeCouples{
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  position: relative;
-}
+    /* Блок пар ребёнка — строго под ребёнком */
+    .personNodeCouples{
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      position: relative;
+    }
 
-/* Линия от ребёнка вниз к его парам */
-.personNodeCouples::before{
-  content:"";
-  position:absolute;
-  left:50%;
-  top:-10px;
-  height:10px;
-  border-left:2px solid #cbd5e1;
-  transform: translateX(-1px);
-}
-
+    /* Линия от ребёнка вниз к его парам */
+    .personNodeCouples::before{
+      content:"";
+      position:absolute;
+      left:50%;
+      top:-10px;
+      height:10px;
+      border-left:2px solid #cbd5e1;
+      transform: translateX(-1px);
+    }
 </style>
 </head>
 
