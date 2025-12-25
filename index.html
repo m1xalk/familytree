@@ -208,7 +208,42 @@
       .personCard .font-semibold { font-size: 11px; }
       .personCard .text-xs { font-size: 9px; }
     }
-  </style>
+  
+    /* Линии к "ребёнок + супруг(а)" — привязываем к ребёнку (а не к центру пары) */
+    .childCoupleLi::before,
+    .childCoupleLi::after { display: none !important; }
+
+    .childCoupleWrap { position: relative; padding-top: 18px; }
+    /* вертикаль от родительской линии к уровню карточек */
+    .childCoupleWrap::before{
+      content:"";
+      position:absolute;
+      left:50%;
+      top:0;
+      height:18px;
+      border-left:2px solid #cbd5e1;
+      transform: translateX(-1px);
+    }
+    /* горизонталь от центра узла к центру карточки ребёнка */
+    .childCoupleWrap::after{
+      content:"";
+      position:absolute;
+      top:18px;
+      left:50%;
+      width:0;
+      border-top:2px solid #cbd5e1;
+      transform: translateY(-1px);
+    }
+    .childCoupleWrap[data-anchor="left"]::after{
+      width: calc(50% - var(--anchor-x, 25%));
+      left: var(--anchor-x, 25%);
+    }
+    .childCoupleWrap[data-anchor="right"]::after{
+      width: calc(var(--anchor-x, 75%) - 50%);
+      left: 50%;
+    }
+
+</style>
 </head>
 
 <body class="bg-gradient-to-br from-slate-50 to-slate-100">
@@ -1065,25 +1100,35 @@
       return (
         <li>
           <div className="flex flex-col items-center gap-3">
-            {personCouples.map((c) => (
-              <div key={c.id} className="w-full">
-                <TreeCoupleContent
-                  couple={c}
-                  people={people}
-                  couples={couples}
-                  couplesByPerson={couplesByPerson}
-                  expandedCouples={expandedCouples}
-                  toggleCoupleExpanded={toggleCoupleExpanded}
-                  onSelectPerson={onSelectPerson}
-                  isAdmin={isAdmin}
-                  onOpenAddChild={onOpenAddChild}
-                  onDeleteCouple={onDeleteCouple}
-                  onDetachChild={onDetachChild}
-                  depth={depth + 1}
-                  path={new Set([...path, person.id])}
-                />
-              </div>
-            ))}
+            {personCouples.map((c) => {
+              const isLeft = c.partner1Id === person.id;
+              const anchor = isLeft ? "left" : "right";
+              const anchorX = isLeft ? "25%" : "75%";
+
+              return (
+                <ul key={c.id} className="clearfix">
+                  <li className="childCoupleLi">
+                    <div className="childCoupleWrap" data-anchor={anchor} style={{ "--anchor-x": anchorX }}>
+                      <TreeCoupleContent
+                        couple={c}
+                        people={people}
+                        couples={couples}
+                        couplesByPerson={couplesByPerson}
+                        expandedCouples={expandedCouples}
+                        toggleCoupleExpanded={toggleCoupleExpanded}
+                        onSelectPerson={onSelectPerson}
+                        isAdmin={isAdmin}
+                        onOpenAddChild={onOpenAddChild}
+                        onDeleteCouple={onDeleteCouple}
+                        onDetachChild={onDetachChild}
+                        depth={depth + 1}
+                        path={new Set([...path, person.id])}
+                      />
+                    </div>
+                  </li>
+                </ul>
+              );
+            })}
           </div>
         </li>
       );
