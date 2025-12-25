@@ -115,7 +115,7 @@
 
     .coupleDownLine { position: relative; display: inline-block; }
     .coupleDownLine::after {
-      content: ""; position: absolute; left: var(--down-x, 50%); transform: translateX(-50%);
+      content: ""; position: absolute; left: 50%; transform: translateX(-50%);
       bottom: -16px; height: 16px; border-left: 2px solid #cbd5e1;
     }
 
@@ -871,7 +871,7 @@
       onSelectPerson, isAdmin, onOpenAddChild,
       onDeleteCouple, onDetachChild,
       depth, path,
-      focusPersonId = null // если задан, стараемся «прибить» линию к этому человеку
+      focusPersonId = null // если задан, не показываем этого человека в паре (чтобы линия шла к ребёнку)
     }) {
       const p1 = people.find(p => p.id === couple.partner1Id) || null;
       const p2 = people.find(p => p.id === couple.partner2Id) || null;
@@ -888,35 +888,30 @@
       if (p1?.id) nextPath.add(p1.id);
       if (p2?.id) nextPath.add(p2.id);
 
-      const focusSide =
-        focusPersonId && p1?.id === focusPersonId ? "left" :
-        focusPersonId && p2?.id === focusPersonId ? "right" :
-        null;
-
-      // Сдвигаем визуально пару так, чтобы «фокусный» человек оказался примерно по центру узла
-      // (это делает линии «родители → ребёнок» визуально корректнее).
-      const shiftPx = focusSide === "left" ? 120 : focusSide === "right" ? -120 : 0;
-
-      // Вертикальная линия вниз (к детям) должна идти из центра фокусного человека
-      const downX = focusSide === "left" ? "25%" : focusSide === "right" ? "75%" : "50%";
-
       return (
         <>
-          <div className="coupleDownLine" style={{ "--down-x": downX }}>
-            <div className="coupleRow" style={{ transform: `translateX(${shiftPx}px)` }}>
-              <PersonCardMini person={p1} onClick={() => p1 && onSelectPerson(p1.id)} />
+          <div className="coupleDownLine">
+            {(() => {
+              const hideLeft = focusPersonId && p1?.id === focusPersonId;
+              const hideRight = focusPersonId && p2?.id === focusPersonId;
 
-              <div
-                className="coupleMid"
-                title={isAdmin ? "Добавить ребёнка" : "Только админ может менять дерево"}
-                aria-disabled={!isAdmin}
-                onClick={() => isAdmin && onOpenAddChild(couple.id)}
-              >
-                {statusIcon}
-              </div>
+              return (
+                <div className="coupleRow">
+                  {!hideLeft && <PersonCardMini person={p1} onClick={() => p1 && onSelectPerson(p1.id)} />}
 
-              <PersonCardMini person={p2} onClick={() => p2 && onSelectPerson(p2.id)} />
-            </div>
+                  <div
+                    className="coupleMid"
+                    title={isAdmin ? "Добавить ребёнка" : "Только админ может менять дерево"}
+                    aria-disabled={!isAdmin}
+                    onClick={() => isAdmin && onOpenAddChild(couple.id)}
+                  >
+                    {statusIcon}
+                  </div>
+
+                  {!hideRight && <PersonCardMini person={p2} onClick={() => p2 && onSelectPerson(p2.id)} />}
+                </div>
+              );
+            })()}
 
             <div className="mt-2 flex items-center justify-center gap-2">
               {children.length > 0 && (
@@ -958,7 +953,6 @@
                   onDetachChild={onDetachChild}
                   depth={depth + 1}
                   path={nextPath}
-                  focusPersonId={person.id}
                 />
               ))}
             </ul>
@@ -977,58 +971,39 @@ function TreePersonNode({
     }) {
       const personCouples = (couplesByPerson.get(person.id) || []);
 
-      // Защита от циклов в данных: если человек уже встречался по пути, не углубляемся дальше
-      if (path && path.has(person.id)) {
-        return (
-          <li>
-            <div className="flex flex-col items-center gap-2">
-              <PersonCardMini person={person} onClick={() => onSelectPerson(person.id)} />
-              <div className="text-[11px] text-slate-400">Цикл в данных — ветка остановлена</div>
-            </div>
-          </li>
-        );
-      }
-
-      const nextPath = new Set(path);
-      nextPath.add(person.id);
-
-      // Лист (нет пар)
-      if (!personCouples.length) {
-        return (
-          <li>
-            <div className="flex flex-col items-center gap-2">
-              <PersonCardMini person={person} onClick={() => onSelectPerson(person.id)} />
-              <div className="text-[11px] text-slate-500">{yearRange(person.birthDate, person.deathDate)}</div>
-            </div>
-          </li>
-        );
-      }
-
-      // Есть пары: показываем их сразу как "пара на уровне", без кнопки "потомки"
+      // Родительская линия должна идти в ребёнка, поэтому ребёнок всегда рисуется отдельной карточкой.
+      // А пары ребёнка — ниже (и самого ребёнка в паре скрываем через focusPersonId).
       return (
         <li>
-          <div className="flex flex-col items-center gap-3">
-            {personCouples.map((c) => (
-              <div key={c.id} className="w-full">
-                <TreeCoupleContent
-                  couple={c}
-                  people={people}
-                  couples={couples}
-                  couplesByPerson={couplesByPerson}
-                  expandedCouples={expandedCouples}
-                  toggleCoupleExpanded={toggleCoupleExpanded}
-                  onSelectPerson={onSelectPerson}
-                  isAdmin={isAdmin}
-                  onOpenAddChild={onOpenAddChild}
-                  onDeleteCouple={onDeleteCouple}
-                  onDetachChild={onDetachChild}
-                  depth={depth + 1}
-                  path={nextPath}
-                  focusPersonId={person.id}
-                />
-              </div>
-            ))}
+          <div className="flex flex-col items-center gap-2">
+            <PersonCardMini person={person} onClick={() => onSelectPerson(person.id)} />
+            <div className="text-[11px] text-slate-500">{yearRange(person.birthDate, person.deathDate)}</div>
           </div>
+
+          {personCouples.length > 0 && (
+            <ul className="clearfix">
+              {personCouples.map((c) => (
+                <li key={c.id}>
+                  <TreeCoupleContent
+                    couple={c}
+                    people={people}
+                    couples={couples}
+                    couplesByPerson={couplesByPerson}
+                    expandedCouples={expandedCouples}
+                    toggleCoupleExpanded={toggleCoupleExpanded}
+                    onSelectPerson={onSelectPerson}
+                    isAdmin={isAdmin}
+                    onOpenAddChild={onOpenAddChild}
+                    onDeleteCouple={onDeleteCouple}
+                    onDetachChild={onDetachChild}
+                    depth={depth + 1}
+                    path={new Set([...path, person.id])}
+                    focusPersonId={person.id}
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
         </li>
       );
     }
