@@ -842,7 +842,8 @@
       toggleCoupleExpanded, togglePersonExpanded,
       onSelectPerson, isAdmin, onOpenAddChild,
       onDeleteCouple, onDetachChild,
-      depth, path
+      depth, path,
+      focusPersonId = null // если задан, не показываем этого человека внутри пары (чтобы не дублировать)
     }) {
       const p1 = people.find(p => p.id === couple.partner1Id) || null;
       const p2 = people.find(p => p.id === couple.partner2Id) || null;
@@ -863,18 +864,27 @@
       return (
         <li>
           <div className="coupleDownLine">
-            <div className="coupleRow">
-              <PersonCardMini person={p1} onClick={() => p1 && onSelectPerson(p1.id)} />
-              <div
-                className="coupleMid"
-                title={isAdmin ? "Добавить ребёнка" : "Только админ может менять дерево"}
-                aria-disabled={!isAdmin}
-                onClick={() => isAdmin && onOpenAddChild()}
-              >
-                {statusIcon}
-              </div>
-              <PersonCardMini person={p2} onClick={() => p2 && onSelectPerson(p2.id)} />
-            </div>
+            {(() => {
+              const hideLeft = focusPersonId && p1?.id === focusPersonId;
+              const hideRight = focusPersonId && p2?.id === focusPersonId;
+
+              return (
+                <div className="coupleRow">
+                  {!hideLeft && <PersonCardMini person={p1} onClick={() => p1 && onSelectPerson(p1.id)} />}
+
+                  <div
+                    className="coupleMid"
+                    title={isAdmin ? "Добавить ребёнка" : "Только админ может менять дерево"}
+                    aria-disabled={!isAdmin}
+                    onClick={() => isAdmin && onOpenAddChild()}
+                  >
+                    {statusIcon}
+                  </div>
+
+                  {!hideRight && <PersonCardMini person={p2} onClick={() => p2 && onSelectPerson(p2.id)} />}
+                </div>
+              );
+            })()}
 
             <div className="mt-2 flex items-center justify-center gap-2">
               {children.length > 0 && (
@@ -981,6 +991,7 @@
                   onDetachChild={() => {}}
                   depth={depth + 1}
                   path={new Set([...path, person.id])}
+                  focusPersonId={person.id}
                 />
               ))}
             </ul>
@@ -1489,4 +1500,3 @@
   </script>
 </body>
 </html>
-
