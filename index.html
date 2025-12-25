@@ -209,12 +209,15 @@
       .personCard .text-xs { font-size: 9px; }
     }
   
-    /* Линии к "ребёнок + супруг(а)" — привязываем к ребёнку (а не к центру пары) */
+        /* Линии к "ребёнок + супруг(а)" — привязываем к ребёнку (а не к центру пары).
+       Делаем так: вертикаль идёт в центр узла (50%), потом по верху уходит к центру карточки ребёнка,
+       и оттуда опускается вниз с таким же закруглением, как у остальных линий. */
     .childCoupleLi::before,
     .childCoupleLi::after { display: none !important; }
 
     .childCoupleWrap { position: relative; padding-top: 18px; }
-    /* вертикаль от родительской линии к уровню карточек */
+
+    /* вертикальная линия от родительского узла в центр (50%) */
     .childCoupleWrap::before{
       content:"";
       position:absolute;
@@ -224,23 +227,31 @@
       border-left:2px solid #cbd5e1;
       transform: translateX(-1px);
     }
-    /* горизонталь от центра узла к центру карточки ребёнка */
+
+    /* L-образная линия: от центра узла (50%) к центру карточки ребёнка, затем вниз */
     .childCoupleWrap::after{
       content:"";
       position:absolute;
-      top:18px;
-      left:50%;
-      width:0;
-      border-top:2px solid #cbd5e1;
-      transform: translateY(-1px);
+      top:0;
+      height:18px;
+      background: transparent;
+      pointer-events: none;
     }
+
     .childCoupleWrap[data-anchor="left"]::after{
-      width: calc(50% - var(--anchor-x, 25%));
       left: var(--anchor-x, 25%);
+      width: calc(50% - var(--anchor-x, 25%));
+      border-top: 2px solid #cbd5e1;
+      border-left: 2px solid #cbd5e1;
+      border-top-left-radius: 12px;
     }
+
     .childCoupleWrap[data-anchor="right"]::after{
-      width: calc(var(--anchor-x, 75%) - 50%);
       left: 50%;
+      width: calc(var(--anchor-x, 75%) - 50%);
+      border-top: 2px solid #cbd5e1;
+      border-right: 2px solid #cbd5e1;
+      border-top-right-radius: 12px;
     }
 
 </style>
