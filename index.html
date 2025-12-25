@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>FamilyTree — визуальное дерево</title>
+  <title>FamilyTree — визуальное дерево (Firebase)</title>
 
   <!-- React -->
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -33,11 +33,51 @@
       border-left:2px solid rgba(100,116,139,.55); transform: translateX(-1px);
     }
 
-    /* Скролл на дереве */
+    /* Скролл */
     .soft-scroll::-webkit-scrollbar { height: 10px; width: 10px; }
     .soft-scroll::-webkit-scrollbar-thumb { background: rgba(148,163,184,.7); border-radius: 999px; }
-    .soft-scroll::-webkit-scrollbar-track { background: rgba(226,232,240,.8); border-radius: 999px; }
+    .soft-scroll::-webkit-scrollbar-track { background: rgba(226,232,240,.15); border-radius: 999px; }
   </style>
+
+  <!-- Firebase (module) -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
+    import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js";
+    import {
+      getFirestore,
+      collection, doc, setDoc, addDoc, deleteDoc,
+      onSnapshot, query, orderBy
+    } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
+
+    // =========================
+    // FIREBASE CONFIG (ВСТАВЬ СВОЙ)
+    // Firebase Console → Project settings → Your apps (Web) → firebaseConfig
+    // =========================
+    const firebaseConfig = {
+      apiKey: "PASTE_ME",
+      authDomain: "PASTE_ME",
+      projectId: "PASTE_ME",
+      storageBucket: "PASTE_ME",
+      messagingSenderId: "PASTE_ME",
+      appId: "PASTE_ME"
+    };
+
+    // Включи: Firestore + Authentication (Anonymous)
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const auth = getAuth(app);
+
+    // Гости смогут писать комменты (если rules allow create when auth != null)
+    await signInAnonymously(auth);
+
+    // Дадим доступ из React-кода (Babel не может import внутри text/babel)
+    window.__FT = {
+      db, auth,
+      collection, doc, setDoc, addDoc, deleteDoc,
+      onSnapshot, query, orderBy
+    };
+    window.__FT_READY = true;
+  </script>
 </head>
 
 <body class="bg-slate-950">
@@ -49,10 +89,10 @@ const { useEffect, useMemo, useState } = React;
 /* =========================
    НАСТРОЙКИ
 ========================= */
-const ADMIN_PASSWORD = "1234"; // поменяй пароль здесь
+const ADMIN_PASSWORD = "1234"; // локальный пароль для показа админ-UI (НЕ заменяет правила Firestore)
 
 /* =========================
-   DEFAULT DATA (замени на свои)
+   ДАННЫЕ ПО УМОЛЧАНИЮ (первый запуск, если база пустая)
 ========================= */
 const DEFAULT_PEOPLE = [
   { id:"p1", firstName:"Иван", lastName:"Иванов", gender:"M", birthDate:"1960-01-01", deathDate:"", notes:"" },
@@ -75,36 +115,8 @@ const DEFAULT_RELATIONSHIPS = [
 const DEFAULT_COMMENTS = [];
 
 /* =========================
-   STORAGE ADAPTER
-   (сейчас localStorage; потом заменим на Firebase/Supabase)
-========================= */
-const Storage = {
-  _keys: {
-    people: "ft3_people",
-    rels: "ft3_rels",
-    comments: "ft3_comments"
-  },
-  async load() {
-    const p = localStorage.getItem(this._keys.people);
-    const r = localStorage.getItem(this._keys.rels);
-    const c = localStorage.getItem(this._keys.comments);
-    return {
-      people: p ? safeJsonParse(p, DEFAULT_PEOPLE) : DEFAULT_PEOPLE,
-      relationships: r ? safeJsonParse(r, DEFAULT_RELATIONSHIPS) : DEFAULT_RELATIONSHIPS,
-      comments: c ? safeJsonParse(c, DEFAULT_COMMENTS) : DEFAULT_COMMENTS
-    };
-  },
-  async save({ people, relationships, comments }) {
-    localStorage.setItem(this._keys.people, JSON.stringify(people));
-    localStorage.setItem(this._keys.rels, JSON.stringify(relationships));
-    localStorage.setItem(this._keys.comments, JSON.stringify(comments));
-  }
-};
-
-/* =========================
    UTILS
 ========================= */
-function safeJsonParse(v, fallback){ try { return JSON.parse(v); } catch { return fallback; } }
 function uid(prefix="id"){ return prefix+"_"+Math.random().toString(16).slice(2)+"_"+Date.now().toString(16); }
 function fmtDate(d){
   if(!d) return "";
@@ -122,18 +134,118 @@ function sortByName(a,b){ return fullName(a).toLowerCase().localeCompare(fullNam
 function Badge({children}){
   return <span className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-xs text-white/80">{children}</span>;
 }
-function Btn({children, onClick, variant="primary", className=""}){
-  const base="px-3 py-2 rounded-xl text-sm font-medium transition border";
+function Btn({children, onClick, variant="primary", className="", disabled=false}){
+  const base="px-3 py-2 rounded-xl text-sm font-medium transition border disabled:opacity-50 disabled:cursor-not-allowed";
   const styles={
     primary:"bg-indigo-500/90 hover:bg-indigo-500 text-white border-white/10",
     ghost:"bg-white/5 hover:bg-white/10 text-white border-white/10",
     danger:"bg-rose-500/85 hover:bg-rose-500 text-white border-white/10",
     ok:"bg-emerald-500/85 hover:bg-emerald-500 text-white border-white/10"
   };
-  return <button onClick={onClick} className={base+" "+styles[variant]+" "+className}>{children}</button>;
+  return <button disabled={disabled} onClick={onClick} className={base+" "+styles[variant]+" "+className}>{children}</button>;
 }
 function Card({children, className=""}){
   return <div className={"rounded-2xl border border-white/10 bg-slate-900/60 shadow-[0_0_0_1px_rgba(255,255,255,0.03)] "+className}>{children}</div>;
+}
+
+/* =========================
+   FIRESTORE ADAPTER (REALTIME)
+========================= */
+function useFirestoreRealtime(setPeople, setRelationships, setComments, setToast){
+  useEffect(()=>{
+    let unsubPeople=null, unsubRels=null, unsubComments=null;
+    const tick = async () => {
+      // ждём пока модуль firebase поднимется
+      const start = Date.now();
+      while (!window.__FT_READY) {
+        if (Date.now() - start > 12000) {
+          setToast("Firebase не инициализировался. Проверь firebaseConfig.");
+          return;
+        }
+        await new Promise(r=>setTimeout(r, 80));
+      }
+
+      const FT = window.__FT;
+
+      unsubPeople = FT.onSnapshot(
+        FT.collection(FT.db, "people"),
+        (snap)=>{
+          const arr = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+          if(arr.length===0){
+            // Если в базе пусто — показываем дефолт локально (и можно залить кнопкой в админке)
+            setPeople(DEFAULT_PEOPLE);
+          } else setPeople(arr);
+        }
+      );
+
+      unsubRels = FT.onSnapshot(
+        FT.collection(FT.db, "relationships"),
+        (snap)=>{
+          const arr = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+          if(arr.length===0) setRelationships(DEFAULT_RELATIONSHIPS);
+          else setRelationships(arr);
+        }
+      );
+
+      unsubComments = FT.onSnapshot(
+        FT.query(FT.collection(FT.db, "comments"), FT.orderBy("dateISO", "asc")),
+        (snap)=>{
+          const arr = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+          setComments(arr.length ? arr : DEFAULT_COMMENTS);
+        }
+      );
+    };
+
+    tick();
+
+    return ()=>{
+      try{ unsubPeople && unsubPeople(); }catch{}
+      try{ unsubRels && unsubRels(); }catch{}
+      try{ unsubComments && unsubComments(); }catch{}
+    };
+  },[setPeople, setRelationships, setComments, setToast]);
+}
+
+async function fsSetPeoplePerson(person){
+  const FT = window.__FT;
+  await FT.setDoc(FT.doc(FT.db, "people", person.id), person, { merge: true });
+}
+async function fsDeletePeoplePerson(id){
+  const FT = window.__FT;
+  await FT.deleteDoc(FT.doc(FT.db, "people", id));
+}
+async function fsSetRelationship(rel){
+  const FT = window.__FT;
+  await FT.setDoc(FT.doc(FT.db, "relationships", rel.id), rel, { merge: true });
+}
+async function fsDeleteRelationship(id){
+  const FT = window.__FT;
+  await FT.deleteDoc(FT.doc(FT.db, "relationships", id));
+}
+async function fsAddComment(comment){
+  const FT = window.__FT;
+  await FT.addDoc(FT.collection(FT.db, "comments"), comment);
+}
+async function fsDeleteComment(id){
+  const FT = window.__FT;
+  await FT.deleteDoc(FT.doc(FT.db, "comments", id));
+}
+
+// Залить дефолтные данные в Firestore (один раз)
+async function fsSeedDefaults(setToast){
+  const FT = window.__FT;
+  if(!FT) return;
+
+  // people
+  for(const p of DEFAULT_PEOPLE){
+    await FT.setDoc(FT.doc(FT.db, "people", p.id), p, { merge: true });
+  }
+  // rels
+  for(const r of DEFAULT_RELATIONSHIPS){
+    await FT.setDoc(FT.doc(FT.db, "relationships", r.id), r, { merge: true });
+  }
+  // comments не льём
+  setToast("Дефолтные данные залиты в Firestore");
 }
 
 /* =========================
@@ -275,7 +387,7 @@ function FamilyTree({ people, relationships, selectedPersonId, onSelect }) {
         <div className="flex items-center gap-2 mb-4">
           <div className="text-white font-semibold text-lg">Визуальное дерево</div>
           <Badge>клик по карточке</Badge>
-          <Badge>пара сверху → дети снизу</Badge>
+          <Badge>Firebase realtime</Badge>
         </div>
 
         <div className="flex flex-col items-center gap-12">
@@ -308,7 +420,7 @@ function App(){
   const [toast,setToast]=useState("");
 
   // auth
-  const [isAdmin,setIsAdmin]=useState(sessionStorage.getItem("ft3_admin") === "1");
+  const [isAdmin,setIsAdmin]=useState(sessionStorage.getItem("ft_admin_ui") === "1");
   const [loginOpen,setLoginOpen]=useState(false);
   const [pwd,setPwd]=useState("");
 
@@ -327,18 +439,8 @@ function App(){
 
   const peopleSorted=useMemo(()=>[...people].sort(sortByName),[people]);
 
-  useEffect(()=>{
-    (async()=>{
-      const data = await Storage.load();
-      setPeople(Array.isArray(data.people)?data.people:DEFAULT_PEOPLE);
-      setRelationships(Array.isArray(data.relationships)?data.relationships:DEFAULT_RELATIONSHIPS);
-      setComments(Array.isArray(data.comments)?data.comments:DEFAULT_COMMENTS);
-    })();
-  },[]);
-
-  useEffect(()=>{
-    Storage.save({ people, relationships, comments });
-  },[people,relationships,comments]);
+  // realtime from Firestore
+  useFirestoreRealtime(setPeople, setRelationships, setComments, setToast);
 
   useEffect(()=>{
     if(!toast) return;
@@ -349,37 +451,35 @@ function App(){
   function login(){
     if(pwd===ADMIN_PASSWORD){
       setIsAdmin(true);
-      sessionStorage.setItem("ft3_admin","1");
+      sessionStorage.setItem("ft_admin_ui","1");
       setLoginOpen(false);
       setPwd("");
-      setToast("Админ включён");
+      setToast("Админ UI включён");
       setTab("admin");
     } else alert("Неверный пароль");
   }
   function logout(){
     setIsAdmin(false);
-    sessionStorage.removeItem("ft3_admin");
-    setToast("Админ выключен");
+    sessionStorage.removeItem("ft_admin_ui");
+    setToast("Админ UI выключен");
     if(tab==="admin") setTab("tree");
   }
 
-  function pickPerson(id){
-    setSelectedPersonId(id);
-  }
+  function pickPerson(id){ setSelectedPersonId(id); }
 
-  function addComment(){
+  async function addComment(){
     if(!selectedPerson) return;
     const t=newComment.trim();
     if(!t) return;
     const author=(commentAuthor.trim() || (isAdmin?"Админ":"Гость")).slice(0,40);
-    setComments(prev=>[...prev,{ id:uid("c"), personId:selectedPerson.id, text:t, author, dateISO:new Date().toISOString() }]);
+    await fsAddComment({ personId:selectedPerson.id, text:t, author, dateISO:new Date().toISOString() });
     setNewComment("");
     setToast("Комментарий добавлен");
   }
-  function deleteComment(id){
+  async function deleteComment(id){
     if(!isAdmin) return;
     if(!confirm("Удалить комментарий?")) return;
-    setComments(prev=>prev.filter(c=>c.id!==id));
+    await fsDeleteComment(id);
     setToast("Комментарий удалён");
   }
 
@@ -400,102 +500,70 @@ function App(){
     if(!isAdmin || !p) return;
     setPersonForm({ id:p.id, firstName:p.firstName||"", lastName:p.lastName||"", gender:p.gender||"U", birthDate:p.birthDate||"", deathDate:p.deathDate||"", notes:p.notes||"" });
   }
-  function savePerson(){
+  async function savePerson(){
     if(!isAdmin) return;
     const firstName=(personForm.firstName||"").trim();
     const lastName=(personForm.lastName||"").trim();
     const gender=personForm.gender||"U";
     if(!firstName && !lastName){ alert("Укажи имя или фамилию"); return; }
 
-    if(personForm.id){
-      setPeople(prev=>prev.map(p=>p.id===personForm.id?{...p,...personForm,firstName,lastName,gender}:p));
-      setToast("Человек обновлён");
-    } else {
-      const id=uid("p");
-      setPeople(prev=>[...prev,{...personForm,id,firstName,lastName,gender}]);
-      setSelectedPersonId(id);
-      setToast("Человек добавлен");
-    }
+    const id = personForm.id || uid("p");
+    const payload = { ...personForm, id, firstName, lastName, gender };
+    await fsSetPeoplePerson(payload);
+    setSelectedPersonId(id);
+    setToast(personForm.id ? "Человек обновлён" : "Человек добавлен");
   }
-  function deletePerson(id){
+  async function deletePerson(id){
     if(!isAdmin) return;
     const p=peopleById.get(id);
     if(!p) return;
-    if(!confirm(`Удалить "${fullName(p)}"? Удалятся связи и комменты.`)) return;
+    if(!confirm(`Удалить "${fullName(p)}"?`)) return;
 
-    setPeople(prev=>prev.filter(x=>x.id!==id));
-    setRelationships(prev=>prev.filter(r=>{
-      if(r.type==="marriage") return r.person1Id!==id && r.person2Id!==id;
-      if(r.type==="parent-child") return r.parentId!==id && r.childId!==id;
-      return true;
-    }));
-    setComments(prev=>prev.filter(c=>c.personId!==id));
+    // удаляем человека
+    await fsDeletePeoplePerson(id);
+
+    // чистим связи, где он участвует (по текущему снимку)
+    const relsToDelete = relationships.filter(r=>{
+      if(r.type==="marriage") return r.person1Id===id || r.person2Id===id;
+      if(r.type==="parent-child") return r.parentId===id || r.childId===id;
+      return false;
+    });
+    for(const r of relsToDelete) await fsDeleteRelationship(r.id);
+
+    // комменты: удалять может только админ по rules — здесь оставим как есть (можно добить позже batch’ем)
     if(selectedPersonId===id) setSelectedPersonId(null);
     setToast("Удалено");
   }
-  function addMarriage(){
+
+  async function addMarriage(){
     if(!isAdmin) return;
     const a=marriageForm.person1Id, b=marriageForm.person2Id;
     if(!a || !b || a===b){ alert("Выбери двух разных людей"); return; }
     const exists=marriages.some(r=>(r.person1Id===a && r.person2Id===b)||(r.person1Id===b && r.person2Id===a));
     if(exists){ alert("Такой брак уже есть"); return; }
 
-    setRelationships(prev=>[...prev,{ id:uid("r"), type:"marriage", person1Id:a, person2Id:b, marriageDate:marriageForm.marriageDate||"", divorceDate:marriageForm.divorceDate||"" }]);
+    const rel = { id: uid("r"), type:"marriage", person1Id:a, person2Id:b, marriageDate:marriageForm.marriageDate||"", divorceDate:marriageForm.divorceDate||"" };
+    await fsSetRelationship(rel);
     setMarriageForm({ person1Id:"", person2Id:"", marriageDate:"", divorceDate:"" });
     setToast("Брак добавлен");
   }
-  function addParentChild(){
+  async function addParentChild(){
     if(!isAdmin) return;
     const parentId=pcForm.parentId, childId=pcForm.childId;
-    if(!parentId || !childId || parentId===childId){ alert("Выбери родителя и ребёнка (разных)"); return; }
+    if(!parentId || !childId || parentId===childId){ alert("Выбери родителя и ребёнка"); return; }
     const exists=parentLinks.some(r=>r.parentId===parentId && r.childId===childId);
     if(exists){ alert("Такая связь уже есть"); return; }
 
-    setRelationships(prev=>[...prev,{ id:uid("r"), type:"parent-child", parentId, childId }]);
+    const rel = { id: uid("r"), type:"parent-child", parentId, childId };
+    await fsSetRelationship(rel);
     setPcForm({ parentId:"", childId:"" });
     setToast("Связь добавлена");
   }
-  function deleteRelationship(id){
+  async function deleteRelationship(id){
     if(!isAdmin) return;
     if(!confirm("Удалить связь?")) return;
-    setRelationships(prev=>prev.filter(r=>r.id!==id));
+    await fsDeleteRelationship(id);
     setToast("Связь удалена");
-  }
-
-  function exportJson(){
-    const payload={ people, relationships, comments, exportedAt:new Date().toISOString() };
-    const text=JSON.stringify(payload,null,2);
-    const blob=new Blob([text],{type:"application/json"});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement("a");
-    a.href=url; a.download="family-tree-export.json"; a.click();
-    URL.revokeObjectURL(url);
-  }
-  function importJsonFile(file){
-    if(!isAdmin) return;
-    const reader=new FileReader();
-    reader.onload=()=>{
-      try{
-        const data=JSON.parse(reader.result);
-        if(!data || !Array.isArray(data.people) || !Array.isArray(data.relationships) || !Array.isArray(data.comments)){
-          alert("Файл не похож на экспорт"); return;
-        }
-        if(!confirm("Заменить текущие данные данными из файла?")) return;
-        setPeople(data.people); setRelationships(data.relationships); setComments(data.comments);
-        setSelectedPersonId(null);
-        setToast("Импорт готов");
-      } catch { alert("Не удалось прочитать JSON"); }
-    };
-    reader.readAsText(file,"utf-8");
-  }
-  function resetToDefaults(){
-    if(!isAdmin) return;
-    if(!confirm("Сбросить к умолчанию?")) return;
-    setPeople(DEFAULT_PEOPLE);
-    setRelationships(DEFAULT_RELATIONSHIPS);
-    setComments(DEFAULT_COMMENTS);
-    setSelectedPersonId(null);
-    setToast("Сброшено");
   }
 
   return (
@@ -504,7 +572,8 @@ function App(){
       <div className="sticky top-0 z-30 border-b border-white/10 bg-slate-950/70 backdrop-blur">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center gap-3">
           <div className="font-semibold text-lg">FamilyTree</div>
-          <Badge>новая структура</Badge>
+          <Badge>Firestore realtime</Badge>
+
           <div className="ml-auto flex items-center gap-2">
             <div className="hidden sm:flex items-center gap-2">
               <Btn variant={tab==="tree"?"primary":"ghost"} onClick={()=>setTab("tree")}>🌳 Дерево</Btn>
@@ -513,7 +582,7 @@ function App(){
             </div>
 
             {isAdmin ? (
-              <Btn variant="ghost" onClick={logout}>Выйти (админ)</Btn>
+              <Btn variant="ghost" onClick={logout}>Выйти (админ UI)</Btn>
             ) : (
               <Btn variant="primary" onClick={()=>setLoginOpen(true)}>Войти (админ)</Btn>
             )}
@@ -533,11 +602,11 @@ function App(){
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
           <Card className="w-full max-w-sm p-5">
             <div className="flex items-center gap-2">
-              <div className="font-semibold text-lg">Вход админа</div>
+              <div className="font-semibold text-lg">Вход админа (UI)</div>
               <button className="ml-auto text-white/60 hover:text-white" onClick={()=>{setLoginOpen(false);setPwd("");}}>✕</button>
             </div>
             <div className="mt-2 text-sm text-white/70">
-              Админ нужен только для редактирования людей и связей.
+              Это только включит кнопки админки в интерфейсе. Реальная защита делается Firestore Rules.
             </div>
             <input
               className="mt-4 w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500/40"
@@ -557,7 +626,7 @@ function App(){
 
       {/* main */}
       <div className="max-w-7xl mx-auto px-4 py-4 grid grid-cols-1 lg:grid-cols-12 gap-4">
-        {/* left main content */}
+        {/* left */}
         <div className="lg:col-span-8 space-y-4">
           {tab==="tree" && (
             <Card className="p-3">
@@ -578,7 +647,7 @@ function App(){
                 {isAdmin && <Btn variant="ok" className="ml-auto" onClick={()=>{startCreatePerson(); setTab("admin");}}>+ Добавить</Btn>}
               </div>
               <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {peopleSorted.map(p=>(
+                {[...people].sort(sortByName).map(p=>(
                   <button
                     key={p.id}
                     onClick={()=>pickPerson(p.id)}
@@ -611,14 +680,7 @@ function App(){
                     <div className="font-semibold text-lg">Админ</div>
                     <Badge>редактирование</Badge>
                     <div className="ml-auto flex gap-2">
-                      <Btn variant="ghost" onClick={exportJson}>Экспорт</Btn>
-                      <label className="px-3 py-2 rounded-xl text-sm font-medium transition border bg-white/5 hover:bg-white/10 text-white border-white/10 cursor-pointer">
-                        Импорт
-                        <input type="file" accept="application/json" className="hidden"
-                          onChange={(e)=>{const f=e.target.files?.[0]; if(f) importJsonFile(f); e.target.value="";}}
-                        />
-                      </label>
-                      <Btn variant="danger" onClick={resetToDefaults}>Сброс</Btn>
+                      <Btn variant="ghost" onClick={()=>fsSeedDefaults(setToast)}>Залить дефолт в Firestore</Btn>
                     </div>
                   </div>
 
@@ -722,7 +784,7 @@ function App(){
                   </div>
 
                   <div className="text-xs text-white/55">
-                    Сейчас всё хранится локально (localStorage). Следующим шагом заменим Storage на Firebase/Supabase, и данные будут общими для всех.
+                    Важно: реальная защита — через Firestore Rules (гости не должны иметь write в people/relationships).
                   </div>
                 </div>
               )}
@@ -805,10 +867,14 @@ function App(){
           </Card>
 
           <Card className="p-4">
-            <div className="font-semibold">Дальше: сервер</div>
-            <div className="mt-2 text-sm text-white/70">
-              Когда дизайн ок — подключим Firebase/Supabase, и дерево+комментарии станут общими для всех.
-            </div>
+            <div className="font-semibold">Что осталось сделать</div>
+            <ol className="mt-2 text-sm text-white/70 list-decimal pl-5 space-y-1">
+              <li>В Firebase Console включить Firestore Database.</li>
+              <li>Включить Authentication → Anonymous.</li>
+              <li>Вставить свой <code className="text-white/90">firebaseConfig</code> в этот файл.</li>
+              <li>Поставить Firestore Rules: всем read, комменты create для auth, people/relationships write только admin.</li>
+              <li>Назначить “реального админа” через custom claims (чтобы rules работали по-настоящему).</li>
+            </ol>
           </Card>
         </div>
       </div>
