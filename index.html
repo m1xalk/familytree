@@ -3,1195 +3,1019 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Семейное дерево (просмотр + комментарии, редактирование только админ)</title>
+  <title>Семейное дерево — схема как раньше</title>
 
   <!-- React -->
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <!-- Babel (чтобы работал JSX в одном файле) -->
+  <!-- Babel (JSX в одном файле) -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <!-- Tailwind -->
   <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    /* Линии для "как раньше" дерева (CSS) */
+    .ft-children {
+      position: relative;
+      padding-top: 18px;
+      margin-top: 10px;
+    }
+    .ft-children:before{
+      content:"";
+      position:absolute;
+      left:50%;
+      top:0;
+      width:0;
+      height:18px;
+      border-left:2px solid rgba(100,116,139,.6);
+      transform: translateX(-1px);
+    }
+    .ft-children-row{
+      position:relative;
+      display:flex;
+      gap:16px;
+      justify-content:center;
+      flex-wrap:wrap;
+      padding-top:14px;
+    }
+    .ft-children-row:before{
+      content:"";
+      position:absolute;
+      left:12px;
+      right:12px;
+      top:0;
+      border-top:2px solid rgba(100,116,139,.6);
+    }
+    .ft-child-wrap{
+      position:relative;
+      padding-top:14px;
+    }
+    .ft-child-wrap:before{
+      content:"";
+      position:absolute;
+      left:50%;
+      top:0;
+      width:0;
+      height:14px;
+      border-left:2px solid rgba(100,116,139,.6);
+      transform: translateX(-1px);
+    }
+  </style>
 </head>
 
 <body class="bg-slate-50 text-slate-900">
   <div id="root"></div>
 
-  <script type="text/babel">
-    const { useEffect, useMemo, useState } = React;
+<script type="text/babel">
+const { useEffect, useMemo, useState } = React;
 
-    /********************
-     * НАСТРОЙКИ
-     ********************/
-    const ADMIN_PASSWORD = "1234"; // <-- поменяй пароль здесь
+/********************
+ * НАСТРОЙКИ
+ ********************/
+const ADMIN_PASSWORD = "1234"; // <-- пароль админа тут
 
-    const LS_KEYS = {
-      people: "ft_people_v1",
-      relationships: "ft_relationships_v1",
-      comments: "ft_comments_v1",
-      adminSession: "ft_is_admin_session_v1" // sessionStorage
-    };
+const LS_KEYS = {
+  people: "ft_people_v2",
+  relationships: "ft_relationships_v2",
+  comments: "ft_comments_v2",
+  adminSession: "ft_is_admin_session_v2" // sessionStorage
+};
 
-    /********************
-     * ДАННЫЕ ПО УМОЛЧАНИЮ
-     * (замени на свои)
-     ********************/
-    function TreeView({ people, relationships, selectedPersonId, onSelect }) {
-  const peopleById = React.useMemo(() => {
+/********************
+ * ДАННЫЕ ПО УМОЛЧАНИЮ (замени на свои)
+ ********************/
+const DEFAULT_PEOPLE = [
+  { id: "p1", firstName: "Иван", lastName: "Иванов", gender: "M", birthDate: "1960-01-01", deathDate: "", notes: "" },
+  { id: "p2", firstName: "Анна", lastName: "Иванова", gender: "F", birthDate: "1962-05-15", deathDate: "", notes: "" },
+  { id: "p3", firstName: "Пётр", lastName: "Иванов", gender: "M", birthDate: "1990-09-09", deathDate: "", notes: "" },
+  { id: "p4", firstName: "Мария", lastName: "Смирнова", gender: "F", birthDate: "1992-11-20", deathDate: "", notes: "" },
+  { id: "p5", firstName: "София", lastName: "Иванова", gender: "F", birthDate: "2018-03-02", deathDate: "", notes: "" }
+];
+
+// relationship types:
+// - marriage (с датами)
+// - parent-child
+const DEFAULT_RELATIONSHIPS = [
+  { id: "r1", type: "marriage", person1Id: "p1", person2Id: "p2", marriageDate: "1985-07-01", divorceDate: "" },
+  { id: "r2", type: "parent-child", parentId: "p1", childId: "p3" },
+  { id: "r3", type: "parent-child", parentId: "p2", childId: "p3" },
+
+  { id: "r4", type: "marriage", person1Id: "p3", person2Id: "p4", marriageDate: "2016-08-10", divorceDate: "" },
+  { id: "r5", type: "parent-child", parentId: "p3", childId: "p5" },
+  { id: "r6", type: "parent-child", parentId: "p4", childId: "p5" }
+];
+
+const DEFAULT_COMMENTS = [];
+
+/********************
+ * УТИЛИТЫ
+ ********************/
+function safeJsonParse(v, fallback) { try { return JSON.parse(v); } catch { return fallback; } }
+function uid(prefix="id") { return prefix + "_" + Math.random().toString(16).slice(2) + "_" + Date.now().toString(16); }
+function fmtDate(d) {
+  if (!d) return "";
+  try { const dt = new Date(d); if (Number.isNaN(dt.getTime())) return d; return dt.toLocaleDateString("ru-RU"); }
+  catch { return d; }
+}
+function fullName(p) {
+  const ln = (p?.lastName || "").trim();
+  const fn = (p?.firstName || "").trim();
+  return [ln, fn].filter(Boolean).join(" ").trim() || "(без имени)";
+}
+function genderLabel(g) { if (g === "M") return "М"; if (g === "F") return "Ж"; return "—"; }
+function sortByName(a, b) { return fullName(a).toLowerCase().localeCompare(fullName(b).toLowerCase(), "ru"); }
+
+function Pill({ children, className="" }) {
+  return <span className={"inline-flex items-center rounded-full px-2 py-0.5 text-xs bg-slate-100 border border-slate-200 " + className}>{children}</span>;
+}
+
+/********************
+ * ДЕРЕВО "КАК РАНЬШЕ"
+ * Семейный блок: (родитель/пара) сверху, дети снизу, линии
+ ********************/
+function FamilyTreeView({ people, relationships, selectedPersonId, onSelect }) {
+  const peopleById = useMemo(() => {
     const m = new Map();
     for (const p of people) m.set(p.id, p);
     return m;
   }, [people]);
 
-  const parentLinks = React.useMemo(
-    () => relationships.filter(r => r.type === "parent-child"),
-    [relationships]
-  );
+  const marriages = useMemo(() => relationships.filter(r => r.type === "marriage"), [relationships]);
+  const parentLinks = useMemo(() => relationships.filter(r => r.type === "parent-child"), [relationships]);
 
-  const childrenOf = React.useCallback((pid) => {
-    return parentLinks.filter(r => r.parentId === pid).map(r => r.childId);
-  }, [parentLinks]);
+  const parentsOf = (childId) =>
+    parentLinks.filter(r => r.childId === childId).map(r => r.parentId);
 
-  const parentsOf = React.useCallback((cid) => {
-    return parentLinks.filter(r => r.childId === cid).map(r => r.parentId);
-  }, [parentLinks]);
+  const childrenOf = (parentId) =>
+    parentLinks.filter(r => r.parentId === parentId).map(r => r.childId);
 
-  const roots = React.useMemo(() => {
+  const spousesOf = (personId) =>
+    marriages
+      .filter(r => r.person1Id === personId || r.person2Id === personId)
+      .map(r => ({ rel: r, spouseId: (r.person1Id === personId ? r.person2Id : r.person1Id) }));
+
+  // "Корни": те, у кого нет родителей (или fallback: все)
+  const roots = useMemo(() => {
     const hasParent = new Set(parentLinks.map(r => r.childId));
-    return people.filter(p => !hasParent.has(p.id)).map(p => p.id);
+    const r = people.filter(p => !hasParent.has(p.id)).map(p => p.id);
+    return r.length ? r : people.map(p => p.id);
   }, [people, parentLinks]);
 
-  // BFS по уровням (поколения)
-  const levels = React.useMemo(() => {
-    const visited = new Set();
-    const lvlMap = new Map(); // id -> level
-    const q = [];
+  // Утилита: дети конкретного союза (пара или одиночка)
+  // Пара: дети, у которых есть (parentA) и (parentB)
+  // Одиночка: дети, у которых есть parentA
+  const childrenOfUnion = (parentAId, parentBId=null) => {
+    const cA = new Set(childrenOf(parentAId));
+    if (!parentBId) return Array.from(cA);
 
-    for (const rid of roots.length ? roots : people.map(p => p.id)) {
-      lvlMap.set(rid, 0);
-      q.push(rid);
-    }
-
-    while (q.length) {
-      const id = q.shift();
-      if (visited.has(id)) continue;
-      visited.add(id);
-
-      const L = lvlMap.get(id) ?? 0;
-      for (const ch of childrenOf(id)) {
-        const nextL = L + 1;
-        if (!lvlMap.has(ch) || (lvlMap.get(ch) > nextL)) lvlMap.set(ch, nextL);
-        q.push(ch);
-      }
-    }
-
-    // собрать массив уровней
-    const maxL = Math.max(0, ...Array.from(lvlMap.values()));
-    const arr = Array.from({ length: maxL + 1 }, () => []);
-    for (const p of people) {
-      const L = lvlMap.get(p.id);
-      if (L === undefined) continue;
-      arr[L].push(p.id);
-    }
-    // сортировка внутри уровня
-    for (const row of arr) {
-      row.sort((a, b) => {
-        const pa = peopleById.get(a); const pb = peopleById.get(b);
-        const an = ((pa?.lastName||"") + " " + (pa?.firstName||"")).toLowerCase();
-        const bn = ((pb?.lastName||"") + " " + (pb?.firstName||"")).toLowerCase();
-        return an.localeCompare(bn, "ru");
-      });
-    }
-    return arr;
-  }, [people, peopleById, roots, childrenOf]);
-
-  // layout
-  const NODE_W = 180;
-  const NODE_H = 54;
-  const GAP_X = 26;
-  const GAP_Y = 44;
-  const PAD = 30;
-
-  const positions = React.useMemo(() => {
-    const pos = new Map();
-    levels.forEach((row, yIdx) => {
-      row.forEach((id, xIdx) => {
-        const x = PAD + xIdx * (NODE_W + GAP_X);
-        const y = PAD + yIdx * (NODE_H + GAP_Y);
-        pos.set(id, { x, y });
-      });
-    });
-    return pos;
-  }, [levels]);
-
-  const size = React.useMemo(() => {
-    const rows = levels.length;
-    const cols = Math.max(1, ...levels.map(r => r.length));
-    return {
-      w: PAD * 2 + cols * NODE_W + (cols - 1) * GAP_X,
-      h: PAD * 2 + rows * NODE_H + (rows - 1) * GAP_Y
-    };
-  }, [levels]);
-
-  const lines = React.useMemo(() => {
-    const out = [];
-    for (const r of parentLinks) {
-      const p = positions.get(r.parentId);
-      const c = positions.get(r.childId);
-      if (!p || !c) continue;
-      const x1 = p.x + NODE_W / 2;
-      const y1 = p.y + NODE_H;
-      const x2 = c.x + NODE_W / 2;
-      const y2 = c.y;
-      // полилиния: вниз, потом к ребенку
-      out.push({ id: r.id, x1, y1, x2, y2 });
-    }
-    return out;
-  }, [parentLinks, positions]);
-
-  const nameOf = (id) => {
-    const p = peopleById.get(id);
-    if (!p) return "(?)";
-    const ln = (p.lastName || "").trim();
-    const fn = (p.firstName || "").trim();
-    return [ln, fn].filter(Boolean).join(" ").trim() || "(без имени)";
+    const cB = new Set(childrenOf(parentBId));
+    const both = [];
+    for (const id of cA) if (cB.has(id)) both.push(id);
+    return both;
   };
 
+  // Чтобы дерево не зацикливалось, ведём visited семей/людей
+  const FamilyNode = ({ parentAId, parentBId=null, depth=0, visitedPeople, visitedUnions }) => {
+    const a = peopleById.get(parentAId);
+    const b = parentBId ? peopleById.get(parentBId) : null;
+    if (!a) return null;
+    const unionKey = parentBId ? [parentAId, parentBId].sort().join("|") : parentAId + "|solo";
+
+    if (visitedUnions.has(unionKey)) return null;
+    visitedUnions.add(unionKey);
+
+    const kids = childrenOfUnion(parentAId, parentBId)
+      .map(id => peopleById.get(id))
+      .filter(Boolean)
+      .sort(sortByName);
+
+    const Card = ({ p }) => {
+      const isSel = p.id === selectedPersonId;
+      return (
+        <button
+          onClick={() => onSelect(p.id)}
+          className={
+            "min-w-[170px] max-w-[220px] text-left px-3 py-2 rounded-2xl border shadow-sm transition " +
+            (isSel ? "bg-indigo-50 border-indigo-300" : "bg-white border-slate-200 hover:bg-slate-50")
+          }
+          title={fullName(p)}
+        >
+          <div className="flex items-center gap-2">
+            <div className="font-semibold truncate">{fullName(p)}</div>
+            <span className="ml-auto text-xs text-slate-600">{genderLabel(p.gender)}</span>
+          </div>
+          <div className="mt-1 text-xs text-slate-600">
+            {p.birthDate ? `р. ${fmtDate(p.birthDate)}` : "дата не указана"}
+            {p.deathDate ? ` • ум. ${fmtDate(p.deathDate)}` : ""}
+          </div>
+        </button>
+      );
+    };
+
+    // Рендер блока пары/родителя
+    return (
+      <div className="flex flex-col items-center">
+        <div className="flex items-center gap-3 flex-wrap justify-center">
+          <Card p={a} />
+          {b && (
+            <>
+              <div className="text-slate-400 text-sm">—</div>
+              <Card p={b} />
+            </>
+          )}
+        </div>
+
+        {kids.length > 0 && (
+          <div className="ft-children w-full">
+            <div className="ft-children-row">
+              {kids.map(child => {
+                // Для ребёнка строим следующий "семейный блок":
+                // 1) если у него есть брак(и) — покажем по бракам
+                // 2) иначе покажем как одиночку (с его детьми)
+                const childSpouses = spousesOf(child.id)
+                  .filter(x => peopleById.get(x.spouseId))
+                  .sort((x,y) => fullName(peopleById.get(x.spouseId)).toLowerCase().localeCompare(fullName(peopleById.get(y.spouseId)).toLowerCase(), "ru"));
+
+                return (
+                  <div key={child.id} className="ft-child-wrap">
+                    {childSpouses.length ? (
+                      <div className="flex flex-col items-center gap-6">
+                        {childSpouses.map(({ spouseId }) => (
+                          <FamilyNode
+                            key={child.id + "_" + spouseId}
+                            parentAId={child.id}
+                            parentBId={spouseId}
+                            depth={depth+1}
+                            visitedPeople={visitedPeople}
+                            visitedUnions={visitedUnions}
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      <FamilyNode
+                        parentAId={child.id}
+                        parentBId={null}
+                        depth={depth+1}
+                        visitedPeople={visitedPeople}
+                        visitedUnions={visitedUnions}
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Сгруппируем корни по бракам: если два корня состоят в браке — показываем их как пару один раз
+  const rootUnionKeys = new Set();
+  const rootBlocks = [];
+
+  for (const rid of roots) {
+    const rSp = spousesOf(rid)
+      .map(x => x.spouseId)
+      .filter(sid => roots.includes(sid)); // только среди корней
+
+    if (rSp.length) {
+      for (const sid of rSp) {
+        const key = [rid, sid].sort().join("|");
+        if (rootUnionKeys.has(key)) continue;
+        rootUnionKeys.add(key);
+        rootBlocks.push({ a: rid, b: sid });
+      }
+    } else {
+      rootBlocks.push({ a: rid, b: null });
+    }
+  }
+
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-4 overflow-auto">
-      <div className="text-sm text-slate-600 mb-2">
-        🌳 Схема: родители сверху, дети снизу. Нажми на человека, чтобы открыть карточку.
+    <div className="bg-white border border-slate-200 rounded-2xl p-4">
+      <div className="flex items-center gap-2">
+        <div className="font-semibold">🌳 Дерево (как раньше)</div>
+        <Pill>пары/родитель сверху, дети снизу</Pill>
+      </div>
+      <div className="mt-2 text-sm text-slate-600">
+        Нажимай на карточки — справа откроется человек и комментарии.
       </div>
 
-      <svg width={size.w} height={size.h} className="select-none">
-        {/* линии */}
-        {lines.map(l => (
-          <polyline
-            key={l.id}
-            points={`${l.x1},${l.y1} ${l.x1},${(l.y1+l.y2)/2} ${l.x2},${(l.y1+l.y2)/2} ${l.x2},${l.y2}`}
-            fill="none"
-            stroke="rgba(100,116,139,0.8)"
-            strokeWidth="2"
-          />
-        ))}
-
-        {/* ноды */}
-        {Array.from(positions.entries()).map(([id, p]) => {
-          const isSel = id === selectedPersonId;
-          return (
-            <g key={id} onClick={() => onSelect(id)} style={{ cursor: "pointer" }}>
-              <rect
-                x={p.x} y={p.y}
-                width={NODE_W} height={NODE_H}
-                rx="14"
-                fill={isSel ? "rgba(99,102,241,0.14)" : "white"}
-                stroke={isSel ? "rgba(99,102,241,0.9)" : "rgba(226,232,240,1)"}
-                strokeWidth="2"
-              />
-              <text
-                x={p.x + NODE_W / 2}
-                y={p.y + 22}
-                textAnchor="middle"
-                fontSize="13"
-                fill="rgba(15,23,42,1)"
-              >
-                {nameOf(id).slice(0, 24)}
-              </text>
-              <text
-                x={p.x + NODE_W / 2}
-                y={p.y + 42}
-                textAnchor="middle"
-                fontSize="11"
-                fill="rgba(100,116,139,1)"
-              >
-                {parentsOf(id).length ? `родителей: ${parentsOf(id).length}` : "корень"}
-              </text>
-            </g>
-          );
-        })}
-      </svg>
+      <div className="mt-5 overflow-auto">
+        <div className="min-w-[900px] flex flex-col items-center gap-10 py-2">
+          {rootBlocks.map((blk, idx) => (
+            <FamilyNode
+              key={(blk.b ? [blk.a, blk.b].sort().join("|") : blk.a) + "_" + idx}
+              parentAId={blk.a}
+              parentBId={blk.b}
+              visitedPeople={new Set()}
+              visitedUnions={new Set()}
+            />
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
 
-    const DEFAULT_PEOPLE = [
-      { id: "p1", firstName: "Иван", lastName: "Иванов", gender: "M", birthDate: "1960-01-01", deathDate: "", notes: "" },
-      { id: "p2", firstName: "Анна", lastName: "Иванова", gender: "F", birthDate: "1962-05-15", deathDate: "", notes: "" },
-      { id: "p3", firstName: "Пётр", lastName: "Иванов", gender: "M", birthDate: "1990-09-09", deathDate: "", notes: "" },
-      { id: "p4", firstName: "Мария", lastName: "Смирнова", gender: "F", birthDate: "1992-11-20", deathDate: "", notes: "" },
-      { id: "p5", firstName: "София", lastName: "Иванова", gender: "F", birthDate: "2018-03-02", deathDate: "", notes: "" }
-    ];
+/********************
+ * ОСНОВНОЕ ПРИЛОЖЕНИЕ
+ ********************/
+function App() {
+  const [people, setPeople] = useState([]);
+  const [relationships, setRelationships] = useState([]);
+  const [comments, setComments] = useState([]);
 
-    // relationship types:
-    // - marriage (с датами)
-    // - parent-child
-    const DEFAULT_RELATIONSHIPS = [
-      { id: "r1", type: "marriage", person1Id: "p1", person2Id: "p2", marriageDate: "1985-07-01", divorceDate: "" },
-      { id: "r2", type: "parent-child", parentId: "p1", childId: "p3" },
-      { id: "r3", type: "parent-child", parentId: "p2", childId: "p3" },
+  const [selectedPersonId, setSelectedPersonId] = useState(null);
+  const selectedPerson = useMemo(() => people.find(p => p.id === selectedPersonId) || null, [people, selectedPersonId]);
 
-      { id: "r4", type: "marriage", person1Id: "p3", person2Id: "p4", marriageDate: "2016-08-10", divorceDate: "" },
-      { id: "r5", type: "parent-child", parentId: "p3", childId: "p5" },
-      { id: "r6", type: "parent-child", parentId: "p4", childId: "p5" }
-    ];
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [showLogin, setShowLogin] = useState(false);
+  const [passwordInput, setPasswordInput] = useState("");
 
-    const DEFAULT_COMMENTS = [
-      // { id, personId, text, author, dateISO }
-    ];
+  const [toast, setToast] = useState("");
 
-    /********************
-     * УТИЛИТЫ
-     ********************/
-    function safeJsonParse(v, fallback) {
-      try { return JSON.parse(v); } catch { return fallback; }
+  const [viewMode, setViewMode] = useState("tree"); // "tree" | "card"
+
+  // Admin forms
+  const [personForm, setPersonForm] = useState({ id:"", firstName:"", lastName:"", gender:"U", birthDate:"", deathDate:"", notes:"" });
+  const [marriageForm, setMarriageForm] = useState({ person1Id:"", person2Id:"", marriageDate:"", divorceDate:"" });
+  const [pcForm, setPcForm] = useState({ parentId:"", childId:"" });
+
+  const [newCommentText, setNewCommentText] = useState("");
+  const [commentAuthor, setCommentAuthor] = useState("");
+
+  // init load
+  useEffect(() => {
+    const pRaw = localStorage.getItem(LS_KEYS.people);
+    const rRaw = localStorage.getItem(LS_KEYS.relationships);
+    const cRaw = localStorage.getItem(LS_KEYS.comments);
+
+    const p = pRaw ? safeJsonParse(pRaw, DEFAULT_PEOPLE) : DEFAULT_PEOPLE;
+    const r = rRaw ? safeJsonParse(rRaw, DEFAULT_RELATIONSHIPS) : DEFAULT_RELATIONSHIPS;
+    const c = cRaw ? safeJsonParse(cRaw, DEFAULT_COMMENTS) : DEFAULT_COMMENTS;
+
+    setPeople(Array.isArray(p) ? p : DEFAULT_PEOPLE);
+    setRelationships(Array.isArray(r) ? r : DEFAULT_RELATIONSHIPS);
+    setComments(Array.isArray(c) ? c : DEFAULT_COMMENTS);
+
+    const adminFlag = sessionStorage.getItem(LS_KEYS.adminSession);
+    setIsAdmin(adminFlag === "1");
+  }, []);
+
+  // persist
+  useEffect(() => localStorage.setItem(LS_KEYS.people, JSON.stringify(people)), [people]);
+  useEffect(() => localStorage.setItem(LS_KEYS.relationships, JSON.stringify(relationships)), [relationships]);
+  useEffect(() => localStorage.setItem(LS_KEYS.comments, JSON.stringify(comments)), [comments]);
+
+  // toast auto-hide
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(""), 2200);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  const peopleById = useMemo(() => {
+    const m = new Map();
+    for (const p of people) m.set(p.id, p);
+    return m;
+  }, [people]);
+
+  const marriages = useMemo(() => relationships.filter(r => r.type === "marriage"), [relationships]);
+  const parentChildLinks = useMemo(() => relationships.filter(r => r.type === "parent-child"), [relationships]);
+
+  function getParents(id) {
+    return parentChildLinks.filter(r => r.childId === id).map(r => peopleById.get(r.parentId)).filter(Boolean);
+  }
+  function getChildren(id) {
+    return parentChildLinks.filter(r => r.parentId === id).map(r => peopleById.get(r.childId)).filter(Boolean);
+  }
+  function getSpouses(id) {
+    return marriages
+      .filter(r => r.person1Id === id || r.person2Id === id)
+      .map(r => ({ rel: r, person: peopleById.get(r.person1Id === id ? r.person2Id : r.person1Id) || null }))
+      .filter(x => x.person);
+  }
+  function getSiblings(personId) {
+    const parents = getParents(personId).map(p => p.id);
+    if (!parents.length) return [];
+    const sib = new Map();
+    for (const link of parentChildLinks) {
+      if (parents.includes(link.parentId) && link.childId !== personId) {
+        const p = peopleById.get(link.childId);
+        if (p) sib.set(p.id, p);
+      }
     }
+    return Array.from(sib.values());
+  }
 
-    function uid(prefix="id") {
-      return prefix + "_" + Math.random().toString(16).slice(2) + "_" + Date.now().toString(16);
+  // --- Admin auth ---
+  function login() {
+    if (passwordInput === ADMIN_PASSWORD) {
+      setIsAdmin(true);
+      sessionStorage.setItem(LS_KEYS.adminSession, "1");
+      setShowLogin(false);
+      setPasswordInput("");
+      setToast("Админ-режим включён");
+    } else {
+      alert("Неверный пароль");
     }
+  }
+  function logout() {
+    setIsAdmin(false);
+    sessionStorage.removeItem(LS_KEYS.adminSession);
+    setToast("Админ-режим выключен");
+  }
 
-    function fmtDate(d) {
-      if (!d) return "";
+  // --- Comments ---
+  function addComment() {
+    if (!selectedPerson) return;
+    const text = newCommentText.trim();
+    if (!text) return;
+    const author = (commentAuthor.trim() || (isAdmin ? "Админ" : "Гость")).slice(0, 40);
+
+    setComments(prev => [...prev, { id: uid("c"), personId: selectedPerson.id, text, author, dateISO: new Date().toISOString() }]);
+    setNewCommentText("");
+    setToast("Комментарий добавлен");
+  }
+  function deleteComment(commentId) {
+    if (!isAdmin) return;
+    if (!confirm("Удалить комментарий?")) return;
+    setComments(prev => prev.filter(c => c.id !== commentId));
+    setToast("Комментарий удалён");
+  }
+
+  const selectedComments = useMemo(() => {
+    if (!selectedPerson) return [];
+    return comments
+      .filter(c => c.personId === selectedPerson.id)
+      .slice()
+      .sort((a,b) => (a.dateISO || "").localeCompare(b.dateISO || ""));
+  }, [comments, selectedPerson]);
+
+  // --- Admin: People CRUD ---
+  function startCreatePerson() {
+    if (!isAdmin) return;
+    setPersonForm({ id:"", firstName:"", lastName:"", gender:"U", birthDate:"", deathDate:"", notes:"" });
+  }
+  function startEditPerson(p) {
+    if (!isAdmin || !p) return;
+    setPersonForm({
+      id: p.id, firstName: p.firstName || "", lastName: p.lastName || "",
+      gender: p.gender || "U", birthDate: p.birthDate || "", deathDate: p.deathDate || "", notes: p.notes || ""
+    });
+  }
+  function savePerson() {
+    if (!isAdmin) return;
+    const firstName = (personForm.firstName || "").trim();
+    const lastName = (personForm.lastName || "").trim();
+    const gender = personForm.gender || "U";
+    if (!firstName && !lastName) { alert("Укажи имя или фамилию"); return; }
+
+    if (personForm.id) {
+      setPeople(prev => prev.map(p => p.id === personForm.id ? { ...p, ...personForm, firstName, lastName, gender } : p));
+      setToast("Человек обновлён");
+    } else {
+      const newId = uid("p");
+      setPeople(prev => [...prev, { ...personForm, id: newId, firstName, lastName, gender }]);
+      setSelectedPersonId(newId);
+      setToast("Человек добавлен");
+    }
+  }
+  function deletePerson(personId) {
+    if (!isAdmin) return;
+    const p = peopleById.get(personId);
+    if (!p) return;
+    if (!confirm(`Удалить "${fullName(p)}"? Также удалятся связи и комментарии.`)) return;
+
+    setPeople(prev => prev.filter(x => x.id !== personId));
+    setRelationships(prev => prev.filter(r => {
+      if (r.type === "marriage") return r.person1Id !== personId && r.person2Id !== personId;
+      if (r.type === "parent-child") return r.parentId !== personId && r.childId !== personId;
+      return true;
+    }));
+    setComments(prev => prev.filter(c => c.personId !== personId));
+    if (selectedPersonId === personId) setSelectedPersonId(null);
+    setToast("Человек удалён");
+  }
+
+  // --- Admin: Relationships ---
+  function addMarriage() {
+    if (!isAdmin) return;
+    const a = marriageForm.person1Id, b = marriageForm.person2Id;
+    if (!a || !b || a === b) { alert("Выбери двух разных людей"); return; }
+    const exists = marriages.some(r => (r.person1Id === a && r.person2Id === b) || (r.person1Id === b && r.person2Id === a));
+    if (exists) { alert("Такой брак уже есть"); return; }
+
+    setRelationships(prev => [...prev, { id: uid("r"), type:"marriage", person1Id:a, person2Id:b, marriageDate: marriageForm.marriageDate || "", divorceDate: marriageForm.divorceDate || "" }]);
+    setMarriageForm({ person1Id:"", person2Id:"", marriageDate:"", divorceDate:"" });
+    setToast("Брак добавлен");
+  }
+  function addParentChild() {
+    if (!isAdmin) return;
+    const parentId = pcForm.parentId, childId = pcForm.childId;
+    if (!parentId || !childId || parentId === childId) { alert("Выбери родителя и ребёнка (разных)"); return; }
+    const exists = parentChildLinks.some(r => r.parentId === parentId && r.childId === childId);
+    if (exists) { alert("Такая связь уже есть"); return; }
+
+    setRelationships(prev => [...prev, { id: uid("r"), type:"parent-child", parentId, childId }]);
+    setPcForm({ parentId:"", childId:"" });
+    setToast("Связь родитель-ребёнок добавлена");
+  }
+  function deleteRelationship(relId) {
+    if (!isAdmin) return;
+    if (!confirm("Удалить связь?")) return;
+    setRelationships(prev => prev.filter(r => r.id !== relId));
+    setToast("Связь удалена");
+  }
+
+  // --- Export/Import ---
+  function exportJson() {
+    const payload = { people, relationships, comments, exportedAt: new Date().toISOString() };
+    const text = JSON.stringify(payload, null, 2);
+    const blob = new Blob([text], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "family-tree-export.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  function importJsonFile(file) {
+    if (!isAdmin) return;
+    const reader = new FileReader();
+    reader.onload = () => {
       try {
-        const dt = new Date(d);
-        if (Number.isNaN(dt.getTime())) return d;
-        return dt.toLocaleDateString("ru-RU");
-      } catch {
-        return d;
-      }
-    }
-
-    function fullName(p) {
-      const ln = (p?.lastName || "").trim();
-      const fn = (p?.firstName || "").trim();
-      return [ln, fn].filter(Boolean).join(" ").trim() || "(без имени)";
-    }
-
-    function genderLabel(g) {
-      if (g === "M") return "М";
-      if (g === "F") return "Ж";
-      return "—";
-    }
-
-    function sortByName(a, b) {
-      const an = fullName(a).toLowerCase();
-      const bn = fullName(b).toLowerCase();
-      return an.localeCompare(bn, "ru");
-    }
-
-    /********************
-     * ОСНОВНОЕ ПРИЛОЖЕНИЕ
-     ********************/
-    function App() {
-      const [people, setPeople] = useState([]);
-      const [relationships, setRelationships] = useState([]);
-      const [comments, setComments] = useState([]);
-
-      const [selectedPersonId, setSelectedPersonId] = useState(null);
-
-      const [isAdmin, setIsAdmin] = useState(false);
-      const [showLogin, setShowLogin] = useState(false);
-      const [passwordInput, setPasswordInput] = useState("");
-
-      const [toast, setToast] = useState("");
-
-      // Admin forms
-      const [personForm, setPersonForm] = useState({
-        id: "",
-        firstName: "",
-        lastName: "",
-        gender: "U",
-        birthDate: "",
-        deathDate: "",
-        notes: ""
-      });
-
-      const [marriageForm, setMarriageForm] = useState({
-        person1Id: "",
-        person2Id: "",
-        marriageDate: "",
-        divorceDate: ""
-      });
-
-      const [pcForm, setPcForm] = useState({
-        parentId: "",
-        childId: ""
-      });
-
-      const selectedPerson = useMemo(() => people.find(p => p.id === selectedPersonId) || null, [people, selectedPersonId]);
-
-      // init load
-      useEffect(() => {
-        const pRaw = localStorage.getItem(LS_KEYS.people);
-        const rRaw = localStorage.getItem(LS_KEYS.relationships);
-        const cRaw = localStorage.getItem(LS_KEYS.comments);
-
-        const p = pRaw ? safeJsonParse(pRaw, DEFAULT_PEOPLE) : DEFAULT_PEOPLE;
-        const r = rRaw ? safeJsonParse(rRaw, DEFAULT_RELATIONSHIPS) : DEFAULT_RELATIONSHIPS;
-        const c = cRaw ? safeJsonParse(cRaw, DEFAULT_COMMENTS) : DEFAULT_COMMENTS;
-
-        setPeople(Array.isArray(p) ? p : DEFAULT_PEOPLE);
-        setRelationships(Array.isArray(r) ? r : DEFAULT_RELATIONSHIPS);
-        setComments(Array.isArray(c) ? c : DEFAULT_COMMENTS);
-
-        // restore admin session in this tab
-        const adminFlag = sessionStorage.getItem(LS_KEYS.adminSession);
-        setIsAdmin(adminFlag === "1");
-      }, []);
-
-      // persist
-      useEffect(() => localStorage.setItem(LS_KEYS.people, JSON.stringify(people)), [people]);
-      useEffect(() => localStorage.setItem(LS_KEYS.relationships, JSON.stringify(relationships)), [relationships]);
-      useEffect(() => localStorage.setItem(LS_KEYS.comments, JSON.stringify(comments)), [comments]);
-
-      // toast auto-hide
-      useEffect(() => {
-        if (!toast) return;
-        const t = setTimeout(() => setToast(""), 2200);
-        return () => clearTimeout(t);
-      }, [toast]);
-
-      const peopleById = useMemo(() => {
-        const m = new Map();
-        for (const p of people) m.set(p.id, p);
-        return m;
-      }, [people]);
-
-      const marriages = useMemo(
-        () => relationships.filter(r => r.type === "marriage"),
-        [relationships]
-      );
-
-      const parentChildLinks = useMemo(
-        () => relationships.filter(r => r.type === "parent-child"),
-        [relationships]
-      );
-
-      function getSpouses(personId) {
-        return marriages
-          .filter(r => r.person1Id === personId || r.person2Id === personId)
-          .map(r => {
-            const otherId = r.person1Id === personId ? r.person2Id : r.person1Id;
-            return { rel: r, person: peopleById.get(otherId) || null };
-          })
-          .filter(x => x.person);
-      }
-
-      function getParents(childId) {
-        return parentChildLinks
-          .filter(r => r.childId === childId)
-          .map(r => peopleById.get(r.parentId))
-          .filter(Boolean);
-      }
-
-      function getChildren(parentId) {
-        return parentChildLinks
-          .filter(r => r.parentId === parentId)
-          .map(r => peopleById.get(r.childId))
-          .filter(Boolean);
-      }
-
-      function getSiblings(personId) {
-        const parents = getParents(personId).map(p => p.id);
-        if (parents.length === 0) return [];
-        const sibSet = new Map();
-        for (const link of parentChildLinks) {
-          if (parents.includes(link.parentId) && link.childId !== personId) {
-            const sib = peopleById.get(link.childId);
-            if (sib) sibSet.set(sib.id, sib);
-          }
-        }
-        return Array.from(sibSet.values());
-      }
-
-      // --- Admin auth ---
-      function login() {
-        if (passwordInput === ADMIN_PASSWORD) {
-          setIsAdmin(true);
-          sessionStorage.setItem(LS_KEYS.adminSession, "1");
-          setShowLogin(false);
-          setPasswordInput("");
-          setToast("Админ-режим включён");
-        } else {
-          alert("Неверный пароль");
-        }
-      }
-
-      function logout() {
-        setIsAdmin(false);
-        sessionStorage.removeItem(LS_KEYS.adminSession);
-        setToast("Админ-режим выключен");
-      }
-
-      // --- Comments ---
-      const [newCommentText, setNewCommentText] = useState("");
-      const [commentAuthor, setCommentAuthor] = useState("");
-
-      function addComment() {
-        if (!selectedPerson) return;
-        const text = newCommentText.trim();
-        if (!text) return;
-
-        const author = (commentAuthor.trim() || (isAdmin ? "Админ" : "Гость")).slice(0, 40);
-
-        setComments(prev => [
-          ...prev,
-          {
-            id: uid("c"),
-            personId: selectedPerson.id,
-            text,
-            author,
-            dateISO: new Date().toISOString()
-          }
-        ]);
-
-        setNewCommentText("");
-        setToast("Комментарий добавлен");
-      }
-
-      function deleteComment(commentId) {
-        if (!isAdmin) return;
-        if (!confirm("Удалить комментарий?")) return;
-        setComments(prev => prev.filter(c => c.id !== commentId));
-        setToast("Комментарий удалён");
-      }
-
-      // --- Admin: People CRUD ---
-      function startCreatePerson() {
-        if (!isAdmin) return;
-        setPersonForm({
-          id: "",
-          firstName: "",
-          lastName: "",
-          gender: "U",
-          birthDate: "",
-          deathDate: "",
-          notes: ""
-        });
-      }
-
-      function startEditPerson(p) {
-        if (!isAdmin || !p) return;
-        setPersonForm({
-          id: p.id,
-          firstName: p.firstName || "",
-          lastName: p.lastName || "",
-          gender: p.gender || "U",
-          birthDate: p.birthDate || "",
-          deathDate: p.deathDate || "",
-          notes: p.notes || ""
-        });
-      }
-
-      function savePerson() {
-        if (!isAdmin) return;
-
-        const firstName = (personForm.firstName || "").trim();
-        const lastName = (personForm.lastName || "").trim();
-        const gender = personForm.gender || "U";
-
-        if (!firstName && !lastName) {
-          alert("Укажи имя или фамилию");
+        const data = JSON.parse(reader.result);
+        if (!data || !Array.isArray(data.people) || !Array.isArray(data.relationships) || !Array.isArray(data.comments)) {
+          alert("Файл не похож на экспорт этого приложения");
           return;
         }
-
-        if (personForm.id) {
-          // update
-          setPeople(prev => prev.map(p => p.id === personForm.id ? { ...p, ...personForm, firstName, lastName, gender } : p));
-          setToast("Человек обновлён");
-        } else {
-          // create
-          const newId = uid("p");
-          setPeople(prev => [...prev, { ...personForm, id: newId, firstName, lastName, gender }]);
-          setToast("Человек добавлен");
-          setSelectedPersonId(newId);
-        }
-
-        // keep form as-is, but ensure id is set if newly created:
-        if (!personForm.id) setPersonForm(f => ({ ...f, id: "" }));
-      }
-
-      function deletePerson(personId) {
-        if (!isAdmin) return;
-        const p = peopleById.get(personId);
-        if (!p) return;
-        if (!confirm(`Удалить "${fullName(p)}"? Также удалятся все связи и комментарии.`)) return;
-
-        setPeople(prev => prev.filter(x => x.id !== personId));
-        setRelationships(prev => prev.filter(r => {
-          if (r.type === "marriage") return r.person1Id !== personId && r.person2Id !== personId;
-          if (r.type === "parent-child") return r.parentId !== personId && r.childId !== personId;
-          return true;
-        }));
-        setComments(prev => prev.filter(c => c.personId !== personId));
-
-        if (selectedPersonId === personId) setSelectedPersonId(null);
-        setToast("Человек удалён");
-      }
-
-      // --- Admin: Relationships ---
-      function addMarriage() {
-        if (!isAdmin) return;
-        const a = marriageForm.person1Id;
-        const b = marriageForm.person2Id;
-        if (!a || !b || a === b) {
-          alert("Выбери двух разных людей");
-          return;
-        }
-        // prevent duplicates
-        const exists = marriages.some(r =>
-          (r.person1Id === a && r.person2Id === b) || (r.person1Id === b && r.person2Id === a)
-        );
-        if (exists) {
-          alert("Такой брак уже есть");
-          return;
-        }
-
-        setRelationships(prev => [
-          ...prev,
-          {
-            id: uid("r"),
-            type: "marriage",
-            person1Id: a,
-            person2Id: b,
-            marriageDate: marriageForm.marriageDate || "",
-            divorceDate: marriageForm.divorceDate || ""
-          }
-        ]);
-
-        setMarriageForm({ person1Id: "", person2Id: "", marriageDate: "", divorceDate: "" });
-        setToast("Брак добавлен");
-      }
-
-      function addParentChild() {
-        if (!isAdmin) return;
-        const parentId = pcForm.parentId;
-        const childId = pcForm.childId;
-        if (!parentId || !childId || parentId === childId) {
-          alert("Выбери родителя и ребёнка (разных)");
-          return;
-        }
-
-        const exists = parentChildLinks.some(r => r.parentId === parentId && r.childId === childId);
-        if (exists) {
-          alert("Такая связь уже есть");
-          return;
-        }
-
-        setRelationships(prev => [...prev, { id: uid("r"), type: "parent-child", parentId, childId }]);
-        setPcForm({ parentId: "", childId: "" });
-        setToast("Связь родитель-ребёнок добавлена");
-      }
-
-      function deleteRelationship(relId) {
-        if (!isAdmin) return;
-        if (!confirm("Удалить связь?")) return;
-        setRelationships(prev => prev.filter(r => r.id !== relId));
-        setToast("Связь удалена");
-      }
-
-      // --- Export/Import ---
-      function exportJson() {
-        const payload = { people, relationships, comments, exportedAt: new Date().toISOString() };
-        const text = JSON.stringify(payload, null, 2);
-        const blob = new Blob([text], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "family-tree-export.json";
-        a.click();
-        URL.revokeObjectURL(url);
-      }
-
-      function importJsonFile(file) {
-        if (!isAdmin) return;
-        const reader = new FileReader();
-        reader.onload = () => {
-          try {
-            const data = JSON.parse(reader.result);
-            if (!data || !Array.isArray(data.people) || !Array.isArray(data.relationships) || !Array.isArray(data.comments)) {
-              alert("Файл не похож на экспорт этого приложения");
-              return;
-            }
-            if (!confirm("Заменить текущие данные данными из файла?")) return;
-            setPeople(data.people);
-            setRelationships(data.relationships);
-            setComments(data.comments);
-            setSelectedPersonId(null);
-            setToast("Импорт выполнен");
-          } catch {
-            alert("Не удалось прочитать JSON");
-          }
-        };
-        reader.readAsText(file, "utf-8");
-      }
-
-      function resetToDefaults() {
-        if (!isAdmin) return;
-        if (!confirm("Сбросить данные к значениям по умолчанию? (перезапишет localStorage)")) return;
-        setPeople(DEFAULT_PEOPLE);
-        setRelationships(DEFAULT_RELATIONSHIPS);
-        setComments(DEFAULT_COMMENTS);
+        if (!confirm("Заменить текущие данные данными из файла?")) return;
+        setPeople(data.people);
+        setRelationships(data.relationships);
+        setComments(data.comments);
         setSelectedPersonId(null);
-        setToast("Сброшено к умолчанию");
+        setToast("Импорт выполнен");
+      } catch {
+        alert("Не удалось прочитать JSON");
       }
+    };
+    reader.readAsText(file, "utf-8");
+  }
+  function resetToDefaults() {
+    if (!isAdmin) return;
+    if (!confirm("Сбросить данные к значениям по умолчанию?")) return;
+    setPeople(DEFAULT_PEOPLE);
+    setRelationships(DEFAULT_RELATIONSHIPS);
+    setComments(DEFAULT_COMMENTS);
+    setSelectedPersonId(null);
+    setToast("Сброшено к умолчанию");
+  }
 
-      // --- Lists for UI ---
-      const peopleSorted = useMemo(() => [...people].sort(sortByName), [people]);
+  const peopleSorted = useMemo(() => [...people].sort(sortByName), [people]);
 
-      const selectedComments = useMemo(() => {
-        if (!selectedPerson) return [];
-        return comments
-          .filter(c => c.personId === selectedPerson.id)
-          .slice()
-          .sort((a, b) => (a.dateISO || "").localeCompare(b.dateISO || ""));
-      }, [comments, selectedPerson]);
+  return (
+    <div className="min-h-screen">
+      {/* Header */}
+      <div className="sticky top-0 z-20 bg-white/85 backdrop-blur border-b border-slate-200">
+        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
+          <div className="font-semibold text-lg">Семейное дерево</div>
+          <div className="text-sm text-slate-600">схема “как раньше” + карточки/комменты</div>
 
-      // --- Derive "top" people (no parents) ---
-      const rootCandidates = useMemo(() => {
-        const hasParent = new Set(parentChildLinks.map(r => r.childId));
-        return peopleSorted.filter(p => !hasParent.has(p.id));
-      }, [peopleSorted, parentChildLinks]);
+          <div className="ml-auto flex items-center gap-2">
+            {isAdmin ? (
+              <>
+                <Pill className="bg-emerald-50 border-emerald-200 text-emerald-800">Админ</Pill>
+                <button onClick={logout} className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-sm">Выйти</button>
+              </>
+            ) : (
+              <>
+                <Pill>Гость</Pill>
+                <button onClick={() => setShowLogin(true)} className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-sm">Войти как админ</button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
 
-      // Render helpers
-      function Pill({ children, className="" }) {
-        return <span className={"inline-flex items-center rounded-full px-2 py-0.5 text-xs bg-slate-100 border border-slate-200 " + className}>{children}</span>;
-      }
+      {/* Toast */}
+      {toast && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30">
+          <div className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm shadow-lg">{toast}</div>
+        </div>
+      )}
 
-      return (
-        <div className="min-h-screen">
-          {/* Header */}
-          <div className="sticky top-0 z-20 bg-white/85 backdrop-blur border-b border-slate-200">
-            <div className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
-              <div className="font-semibold text-lg">Семейное дерево</div>
-              <div className="text-sm text-slate-600">
-                Просмотр + комментарии для гостей, редактирование только админ
-              </div>
+      {/* Login modal */}
+      {showLogin && (
+        <div className="fixed inset-0 z-40 bg-black/40 flex items-center justify-center p-4">
+          <div className="w-full max-w-sm bg-white rounded-2xl shadow-xl border border-slate-200 p-5">
+            <div className="flex items-start gap-3">
+              <div className="font-semibold text-lg">Вход админа</div>
+              <button onClick={() => { setShowLogin(false); setPasswordInput(""); }} className="ml-auto text-slate-500 hover:text-slate-900">✕</button>
+            </div>
+            <div className="mt-3 text-sm text-slate-600">
+              Пароль нужен только для редактирования. Гости могут читать и писать комментарии.
+            </div>
+            <input
+              type="password"
+              value={passwordInput}
+              onChange={(e) => setPasswordInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") login(); }}
+              placeholder="Пароль"
+              className="mt-4 w-full border border-slate-300 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-200"
+            />
+            <button onClick={login} className="mt-3 w-full px-4 py-2 rounded-xl bg-indigo-600 text-white font-medium">
+              Войти
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Main layout */}
+      <div className="max-w-6xl mx-auto px-4 py-5 grid grid-cols-1 lg:grid-cols-12 gap-4">
+        {/* Left: list */}
+        <div className="lg:col-span-4 space-y-3">
+          <div className="bg-white border border-slate-200 rounded-2xl p-4">
+            <div className="flex items-center gap-2">
+              <div className="font-semibold">Люди</div>
+              <Pill>{people.length}</Pill>
               <div className="ml-auto flex items-center gap-2">
-                {isAdmin ? (
-                  <>
-                    <Pill className="bg-emerald-50 border-emerald-200 text-emerald-800">Админ</Pill>
-                    <button onClick={logout} className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-sm">Выйти</button>
-                  </>
-                ) : (
-                  <>
-                    <Pill>Гость</Pill>
-                    <button onClick={() => setShowLogin(true)} className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-sm">Войти как админ</button>
-                  </>
+                {isAdmin && (
+                  <button onClick={startCreatePerson} className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-sm">
+                    + Добавить
+                  </button>
                 )}
               </div>
             </div>
+
+            <div className="mt-3 max-h-[55vh] overflow-auto pr-1 space-y-2">
+              {peopleSorted.map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => setSelectedPersonId(p.id)}
+                  className={
+                    "w-full text-left p-3 rounded-xl border transition " +
+                    (selectedPersonId === p.id ? "bg-indigo-50 border-indigo-200" : "bg-white border-slate-200 hover:bg-slate-50")
+                  }
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="font-medium">{fullName(p)}</div>
+                    <Pill className="ml-auto">{genderLabel(p.gender)}</Pill>
+                  </div>
+                  <div className="mt-1 text-xs text-slate-600">
+                    {p.birthDate ? `р. ${fmtDate(p.birthDate)}` : "дата рождения не указана"}
+                    {p.deathDate ? ` • ум. ${fmtDate(p.deathDate)}` : ""}
+                  </div>
+                </button>
+              ))}
+              {peopleSorted.length === 0 && <div className="text-sm text-slate-600">Пока нет людей.</div>}
+            </div>
           </div>
 
-          {/* Toast */}
-          {toast && (
-            <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30">
-              <div className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm shadow-lg">{toast}</div>
-            </div>
-          )}
+          {/* Admin tools */}
+          {isAdmin && (
+            <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-3">
+              <div className="font-semibold">Админ: сервис</div>
+              <div className="flex flex-wrap gap-2">
+                <button onClick={exportJson} className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-sm">Экспорт JSON</button>
 
-          {/* Login modal */}
-          {showLogin && (
-            <div className="fixed inset-0 z-40 bg-black/40 flex items-center justify-center p-4">
-              <div className="w-full max-w-sm bg-white rounded-2xl shadow-xl border border-slate-200 p-5">
-                <div className="flex items-start gap-3">
-                  <div className="font-semibold text-lg">Вход админа</div>
-                  <button onClick={() => { setShowLogin(false); setPasswordInput(""); }} className="ml-auto text-slate-500 hover:text-slate-900">✕</button>
-                </div>
-                <div className="mt-3 text-sm text-slate-600">
-                  Пароль нужен только для редактирования. Гости могут читать и писать комментарии.
-                </div>
-                <input
-                  type="password"
-                  value={passwordInput}
-                  onChange={(e) => setPasswordInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") login(); }}
-                  placeholder="Пароль"
-                  className="mt-4 w-full border border-slate-300 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-200"
-                />
-                <button
-                  onClick={login}
-                  className="mt-3 w-full px-4 py-2 rounded-xl bg-indigo-600 text-white font-medium"
-                >
-                  Войти
+                <label className="px-3 py-1.5 rounded-lg bg-slate-100 border border-slate-200 text-sm cursor-pointer">
+                  Импорт JSON
+                  <input
+                    type="file"
+                    accept="application/json"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) importJsonFile(f);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+
+                <button onClick={resetToDefaults} className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-sm">
+                  Сброс к умолчанию
                 </button>
               </div>
+              <div className="text-xs text-slate-600">
+                Экспорт/импорт — перенос данных между устройствами без сервера.
+              </div>
             </div>
           )}
+        </div>
 
-          {/* Main layout */}
-          <div className="max-w-6xl mx-auto px-4 py-5 grid grid-cols-1 lg:grid-cols-12 gap-4">
-            {/* Left: people list */}
-            <div className="lg:col-span-4 space-y-3">
-              <div className="bg-white border border-slate-200 rounded-2xl p-4">
-                <div className="flex items-center gap-2">
-                  <div className="font-semibold">Люди</div>
-                  <Pill>{people.length}</Pill>
-                  <div className="ml-auto flex items-center gap-2">
-                    {isAdmin && (
-                      <button
-                        onClick={startCreatePerson}
-                        className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-sm"
-                      >
-                        + Добавить
-                      </button>
-                    )}
-                  </div>
-                </div>
+        {/* Right: main */}
+        <div className="lg:col-span-8 space-y-4">
+          {/* переключатель режимов */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => setViewMode("tree")}
+              className={"px-3 py-1.5 rounded-lg text-sm border " + (viewMode==="tree" ? "bg-indigo-600 text-white border-indigo-600" : "bg-white border-slate-200")}
+            >
+              🌳 Дерево (как раньше)
+            </button>
+            <button
+              onClick={() => setViewMode("card")}
+              className={"px-3 py-1.5 rounded-lg text-sm border " + (viewMode==="card" ? "bg-indigo-600 text-white border-indigo-600" : "bg-white border-slate-200")}
+            >
+              🧾 Карточки
+            </button>
+          </div>
 
-                <div className="mt-3 max-h-[55vh] overflow-auto pr-1 space-y-2">
-                  {peopleSorted.map(p => (
-                    <button
-                      key={p.id}
-                      onClick={() => setSelectedPersonId(p.id)}
-                      className={
-                        "w-full text-left p-3 rounded-xl border transition " +
-                        (selectedPersonId === p.id
-                          ? "bg-indigo-50 border-indigo-200"
-                          : "bg-white border-slate-200 hover:bg-slate-50")
-                      }
-                    >
-                      <div className="flex items-center gap-2">
-                        <div className="font-medium">{fullName(p)}</div>
-                        <Pill className="ml-auto">{genderLabel(p.gender)}</Pill>
-                      </div>
-                      <div className="mt-1 text-xs text-slate-600">
-                        {p.birthDate ? `р. ${fmtDate(p.birthDate)}` : "дата рождения не указана"}
-                        {p.deathDate ? ` • ум. ${fmtDate(p.deathDate)}` : ""}
-                      </div>
-                    </button>
-                  ))}
-                  {peopleSorted.length === 0 && (
-                    <div className="text-sm text-slate-600">Пока нет людей.</div>
-                  )}
+          {viewMode === "tree" ? (
+            <FamilyTreeView
+              people={people}
+              relationships={relationships}
+              selectedPersonId={selectedPersonId}
+              onSelect={(id) => { setSelectedPersonId(id); }}
+            />
+          ) : (
+            !selectedPerson ? (
+              <div className="bg-white border border-slate-200 rounded-2xl p-6">
+                <div className="text-lg font-semibold">Выбери человека слева</div>
+                <div className="mt-2 text-slate-600">
+                  Гости могут оставлять комментарии. Редактирование доступно только в админ-режиме.
                 </div>
               </div>
-
-              {/* Roots quick view */}
-              <div className="bg-white border border-slate-200 rounded-2xl p-4">
-                <div className="font-semibold">Верхние в дереве (без родителей)</div>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {rootCandidates.map(p => (
-                    <button
-                      key={p.id}
-                      onClick={() => setSelectedPersonId(p.id)}
-                      className="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-sm"
-                    >
-                      {fullName(p)}
-                    </button>
-                  ))}
-                  {rootCandidates.length === 0 && (
-                    <div className="text-sm text-slate-600">Не найдено (возможно, у всех есть родители).</div>
-                  )}
-                </div>
-              </div>
-
-              {/* Admin tools */}
-              {isAdmin && (
-                <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-3">
-                  <div className="font-semibold">Админ: сервис</div>
-                  <div className="flex flex-wrap gap-2">
-                    <button onClick={exportJson} className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-sm">
-                      Экспорт JSON
-                    </button>
-
-                    <label className="px-3 py-1.5 rounded-lg bg-slate-100 border border-slate-200 text-sm cursor-pointer">
-                      Импорт JSON
-                      <input
-                        type="file"
-                        accept="application/json"
-                        className="hidden"
-                        onChange={(e) => {
-                          const f = e.target.files?.[0];
-                          if (f) importJsonFile(f);
-                          e.target.value = "";
-                        }}
-                      />
-                    </label>
-
-                    <button onClick={resetToDefaults} className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-sm">
-                      Сброс к умолчанию
-                    </button>
-                  </div>
-
-                  <div className="text-xs text-slate-600">
-                    Экспорт/импорт — самый простой способ переносить данные между устройствами без сервера.
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Right: person details */}
-            <div className="lg:col-span-8 space-y-4">
-              {!selectedPerson ? (
-                <div className="bg-white border border-slate-200 rounded-2xl p-6">
-                  <div className="text-lg font-semibold">Выбери человека слева</div>
-                  <div className="mt-2 text-slate-600">
-                    Гости могут оставлять комментарии. Редактирование доступно только в админ-режиме.
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <div className="bg-white border border-slate-200 rounded-2xl p-5">
-                    <div className="flex items-start gap-3">
-                      <div>
-                        <div className="text-2xl font-semibold">{fullName(selectedPerson)}</div>
-                        <div className="mt-1 text-sm text-slate-600">
-                          Пол: {genderLabel(selectedPerson.gender)}{" "}
-                          {selectedPerson.birthDate ? `• р. ${fmtDate(selectedPerson.birthDate)}` : ""}
-                          {selectedPerson.deathDate ? ` • ум. ${fmtDate(selectedPerson.deathDate)}` : ""}
-                        </div>
-                      </div>
-
-                      <div className="ml-auto flex gap-2">
-                        {isAdmin && (
-                          <>
-                            <button
-                              onClick={() => startEditPerson(selectedPerson)}
-                              className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-sm"
-                            >
-                              Редактировать
-                            </button>
-                            <button
-                              onClick={() => deletePerson(selectedPerson.id)}
-                              className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-sm"
-                            >
-                              Удалить
-                            </button>
-                          </>
-                        )}
+            ) : (
+              <>
+                {/* Person card */}
+                <div className="bg-white border border-slate-200 rounded-2xl p-5">
+                  <div className="flex items-start gap-3">
+                    <div>
+                      <div className="text-2xl font-semibold">{fullName(selectedPerson)}</div>
+                      <div className="mt-1 text-sm text-slate-600">
+                        Пол: {genderLabel(selectedPerson.gender)}{" "}
+                        {selectedPerson.birthDate ? `• р. ${fmtDate(selectedPerson.birthDate)}` : ""}
+                        {selectedPerson.deathDate ? ` • ум. ${fmtDate(selectedPerson.deathDate)}` : ""}
                       </div>
                     </div>
 
-                    {selectedPerson.notes?.trim() && (
-                      <div className="mt-4">
-                        <div className="text-sm font-semibold">Заметки</div>
-                        <div className="mt-1 text-sm text-slate-700 whitespace-pre-wrap">{selectedPerson.notes}</div>
-                      </div>
-                    )}
-
-                    <div className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-3">
-                      <div className="border border-slate-200 rounded-xl p-3">
-                        <div className="text-sm font-semibold">Родители</div>
-                        <div className="mt-2 space-y-1">
-                          {getParents(selectedPerson.id).sort(sortByName).map(p => (
-                            <button key={p.id} onClick={() => setSelectedPersonId(p.id)} className="block text-left text-sm text-indigo-700 hover:underline">
-                              {fullName(p)}
-                            </button>
-                          ))}
-                          {getParents(selectedPerson.id).length === 0 && <div className="text-sm text-slate-600">Нет данных</div>}
-                        </div>
-                      </div>
-
-                      <div className="border border-slate-200 rounded-xl p-3">
-                        <div className="text-sm font-semibold">Дети</div>
-                        <div className="mt-2 space-y-1">
-                          {getChildren(selectedPerson.id).sort(sortByName).map(p => (
-                            <button key={p.id} onClick={() => setSelectedPersonId(p.id)} className="block text-left text-sm text-indigo-700 hover:underline">
-                              {fullName(p)}
-                            </button>
-                          ))}
-                          {getChildren(selectedPerson.id).length === 0 && <div className="text-sm text-slate-600">Нет данных</div>}
-                        </div>
-                      </div>
-
-                      <div className="border border-slate-200 rounded-xl p-3">
-                        <div className="text-sm font-semibold">Пары</div>
-                        <div className="mt-2 space-y-2">
-                          {getSpouses(selectedPerson.id).map(({ rel, person }) => (
-                            <div key={rel.id} className="text-sm">
-                              <button onClick={() => setSelectedPersonId(person.id)} className="text-indigo-700 hover:underline">
-                                {fullName(person)}
-                              </button>
-                              <div className="text-xs text-slate-600 mt-0.5">
-                                {rel.marriageDate ? `брак: ${fmtDate(rel.marriageDate)}` : "брак: дата не указана"}
-                                {rel.divorceDate ? ` • развод: ${fmtDate(rel.divorceDate)}` : ""}
-                              </div>
-                              {isAdmin && (
-                                <div className="mt-1">
-                                  <button onClick={() => deleteRelationship(rel.id)} className="text-xs text-red-600 hover:underline">
-                                    удалить связь
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                          {getSpouses(selectedPerson.id).length === 0 && <div className="text-sm text-slate-600">Нет данных</div>}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="mt-4 border border-slate-200 rounded-xl p-3">
-                      <div className="text-sm font-semibold">Братья/сёстры (по общим родителям)</div>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {getSiblings(selectedPerson.id).sort(sortByName).map(p => (
-                          <button
-                            key={p.id}
-                            onClick={() => setSelectedPersonId(p.id)}
-                            className="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-sm"
-                          >
-                            {fullName(p)}
+                    <div className="ml-auto flex gap-2">
+                      {isAdmin && (
+                        <>
+                          <button onClick={() => startEditPerson(selectedPerson)} className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-sm">
+                            Редактировать
                           </button>
-                        ))}
-                        {getSiblings(selectedPerson.id).length === 0 && (
-                          <div className="text-sm text-slate-600">Нет данных</div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Comments */}
-                  <div className="bg-white border border-slate-200 rounded-2xl p-5">
-                    <div className="flex items-center gap-2">
-                      <div className="font-semibold">Комментарии</div>
-                      <Pill>{selectedComments.length}</Pill>
-                      <div className="ml-auto text-xs text-slate-600">
-                        Видно всем • удалять может только админ
-                      </div>
-                    </div>
-
-                    <div className="mt-3 grid grid-cols-1 md:grid-cols-12 gap-2">
-                      <input
-                        value={commentAuthor}
-                        onChange={(e) => setCommentAuthor(e.target.value)}
-                        placeholder="Имя (необязательно)"
-                        className="md:col-span-4 border border-slate-300 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-200"
-                      />
-                      <div className="md:col-span-8 flex gap-2">
-                        <input
-                          value={newCommentText}
-                          onChange={(e) => setNewCommentText(e.target.value)}
-                          onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) addComment(); }}
-                          placeholder="Комментарий (Ctrl+Enter отправить)"
-                          className="flex-1 border border-slate-300 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-200"
-                        />
-                        <button onClick={addComment} className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-medium">
-                          Отправить
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="mt-4 space-y-3">
-                      {selectedComments.map(c => (
-                        <div key={c.id} className="border border-slate-200 rounded-xl p-3">
-                          <div className="flex items-center gap-2">
-                            <div className="text-sm font-medium">{c.author || "Гость"}</div>
-                            <div className="text-xs text-slate-500">{new Date(c.dateISO).toLocaleString("ru-RU")}</div>
-                            {isAdmin && (
-                              <button
-                                onClick={() => deleteComment(c.id)}
-                                className="ml-auto text-xs text-red-600 hover:underline"
-                              >
-                                удалить
-                              </button>
-                            )}
-                          </div>
-                          <div className="mt-2 text-sm text-slate-800 whitespace-pre-wrap">{c.text}</div>
-                        </div>
-                      ))}
-                      {selectedComments.length === 0 && (
-                        <div className="text-sm text-slate-600">Пока нет комментариев.</div>
+                          <button onClick={() => deletePerson(selectedPerson.id)} className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-sm">
+                            Удалить
+                          </button>
+                        </>
                       )}
                     </div>
                   </div>
 
-                  {/* Admin panels */}
-                  {isAdmin && (
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                      {/* Person editor */}
-                      <div className="bg-white border border-slate-200 rounded-2xl p-5">
+                  {selectedPerson.notes?.trim() && (
+                    <div className="mt-4">
+                      <div className="text-sm font-semibold">Заметки</div>
+                      <div className="mt-1 text-sm text-slate-700 whitespace-pre-wrap">{selectedPerson.notes}</div>
+                    </div>
+                  )}
+
+                  <div className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className="border border-slate-200 rounded-xl p-3">
+                      <div className="text-sm font-semibold">Родители</div>
+                      <div className="mt-2 space-y-1">
+                        {getParents(selectedPerson.id).sort(sortByName).map(p => (
+                          <button key={p.id} onClick={() => setSelectedPersonId(p.id)} className="block text-left text-sm text-indigo-700 hover:underline">
+                            {fullName(p)}
+                          </button>
+                        ))}
+                        {getParents(selectedPerson.id).length === 0 && <div className="text-sm text-slate-600">Нет данных</div>}
+                      </div>
+                    </div>
+
+                    <div className="border border-slate-200 rounded-xl p-3">
+                      <div className="text-sm font-semibold">Дети</div>
+                      <div className="mt-2 space-y-1">
+                        {getChildren(selectedPerson.id).sort(sortByName).map(p => (
+                          <button key={p.id} onClick={() => setSelectedPersonId(p.id)} className="block text-left text-sm text-indigo-700 hover:underline">
+                            {fullName(p)}
+                          </button>
+                        ))}
+                        {getChildren(selectedPerson.id).length === 0 && <div className="text-sm text-slate-600">Нет данных</div>}
+                      </div>
+                    </div>
+
+                    <div className="border border-slate-200 rounded-xl p-3">
+                      <div className="text-sm font-semibold">Пары</div>
+                      <div className="mt-2 space-y-2">
+                        {getSpouses(selectedPerson.id).map(({ rel, person }) => (
+                          <div key={rel.id} className="text-sm">
+                            <button onClick={() => setSelectedPersonId(person.id)} className="text-indigo-700 hover:underline">
+                              {fullName(person)}
+                            </button>
+                            <div className="text-xs text-slate-600 mt-0.5">
+                              {rel.marriageDate ? `брак: ${fmtDate(rel.marriageDate)}` : "брак: дата не указана"}
+                              {rel.divorceDate ? ` • развод: ${fmtDate(rel.divorceDate)}` : ""}
+                            </div>
+                            {isAdmin && (
+                              <div className="mt-1">
+                                <button onClick={() => deleteRelationship(rel.id)} className="text-xs text-red-600 hover:underline">
+                                  удалить связь
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                        {getSpouses(selectedPerson.id).length === 0 && <div className="text-sm text-slate-600">Нет данных</div>}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 border border-slate-200 rounded-xl p-3">
+                    <div className="text-sm font-semibold">Братья/сёстры (по общим родителям)</div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {getSiblings(selectedPerson.id).sort(sortByName).map(p => (
+                        <button key={p.id} onClick={() => setSelectedPersonId(p.id)} className="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-sm">
+                          {fullName(p)}
+                        </button>
+                      ))}
+                      {getSiblings(selectedPerson.id).length === 0 && <div className="text-sm text-slate-600">Нет данных</div>}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Comments */}
+                <div className="bg-white border border-slate-200 rounded-2xl p-5">
+                  <div className="flex items-center gap-2">
+                    <div className="font-semibold">Комментарии</div>
+                    <Pill>{selectedComments.length}</Pill>
+                    <div className="ml-auto text-xs text-slate-600">видно всем • удалять может только админ</div>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-1 md:grid-cols-12 gap-2">
+                    <input
+                      value={commentAuthor}
+                      onChange={(e) => setCommentAuthor(e.target.value)}
+                      placeholder="Имя (необязательно)"
+                      className="md:col-span-4 border border-slate-300 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-200"
+                    />
+                    <div className="md:col-span-8 flex gap-2">
+                      <input
+                        value={newCommentText}
+                        onChange={(e) => setNewCommentText(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) addComment(); }}
+                        placeholder="Комментарий (Ctrl+Enter отправить)"
+                        className="flex-1 border border-slate-300 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-200"
+                      />
+                      <button onClick={addComment} className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-medium">
+                        Отправить
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 space-y-3">
+                    {selectedComments.map(c => (
+                      <div key={c.id} className="border border-slate-200 rounded-xl p-3">
                         <div className="flex items-center gap-2">
-                          <div className="font-semibold">{personForm.id ? "Редактирование человека" : "Добавить человека"}</div>
-                          {personForm.id ? <Pill>edit</Pill> : <Pill>new</Pill>}
-                        </div>
-
-                        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
-                          <input
-                            value={personForm.lastName}
-                            onChange={(e) => setPersonForm(f => ({ ...f, lastName: e.target.value }))}
-                            placeholder="Фамилия"
-                            className="border border-slate-300 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-200"
-                          />
-                          <input
-                            value={personForm.firstName}
-                            onChange={(e) => setPersonForm(f => ({ ...f, firstName: e.target.value }))}
-                            placeholder="Имя"
-                            className="border border-slate-300 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-200"
-                          />
-
-                          <select
-                            value={personForm.gender}
-                            onChange={(e) => setPersonForm(f => ({ ...f, gender: e.target.value }))}
-                            className="border border-slate-300 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-200"
-                          >
-                            <option value="U">Пол: не указан</option>
-                            <option value="M">М</option>
-                            <option value="F">Ж</option>
-                          </select>
-
-                          <input
-                            type="date"
-                            value={personForm.birthDate}
-                            onChange={(e) => setPersonForm(f => ({ ...f, birthDate: e.target.value }))}
-                            className="border border-slate-300 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-200"
-                            title="Дата рождения"
-                          />
-
-                          <input
-                            type="date"
-                            value={personForm.deathDate}
-                            onChange={(e) => setPersonForm(f => ({ ...f, deathDate: e.target.value }))}
-                            className="border border-slate-300 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-200"
-                            title="Дата смерти (если есть)"
-                          />
-
-                          <textarea
-                            value={personForm.notes}
-                            onChange={(e) => setPersonForm(f => ({ ...f, notes: e.target.value }))}
-                            placeholder="Заметки (необязательно)"
-                            rows="3"
-                            className="md:col-span-2 border border-slate-300 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-200"
-                          />
-                        </div>
-
-                        <div className="mt-3 flex gap-2">
-                          <button onClick={savePerson} className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-medium">
-                            Сохранить
-                          </button>
-                          <button onClick={startCreatePerson} className="px-4 py-2 rounded-xl bg-slate-100 border border-slate-200 text-sm">
-                            Очистить форму
-                          </button>
-                          {selectedPerson && (
-                            <button onClick={() => startEditPerson(selectedPerson)} className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm">
-                              В форму: выбранного
+                          <div className="text-sm font-medium">{c.author || "Гость"}</div>
+                          <div className="text-xs text-slate-500">{new Date(c.dateISO).toLocaleString("ru-RU")}</div>
+                          {isAdmin && (
+                            <button onClick={() => deleteComment(c.id)} className="ml-auto text-xs text-red-600 hover:underline">
+                              удалить
                             </button>
                           )}
                         </div>
+                        <div className="mt-2 text-sm text-slate-800 whitespace-pre-wrap">{c.text}</div>
+                      </div>
+                    ))}
+                    {selectedComments.length === 0 && <div className="text-sm text-slate-600">Пока нет комментариев.</div>}
+                  </div>
+                </div>
 
-                        <div className="mt-2 text-xs text-slate-600">
-                          Совет: сначала добавь людей, потом связи.
-                        </div>
+                {/* Admin panels */}
+                {isAdmin && (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {/* Person editor */}
+                    <div className="bg-white border border-slate-200 rounded-2xl p-5">
+                      <div className="flex items-center gap-2">
+                        <div className="font-semibold">{personForm.id ? "Редактирование человека" : "Добавить человека"}</div>
+                        {personForm.id ? <Pill>edit</Pill> : <Pill>new</Pill>}
                       </div>
 
-                      {/* Relationships editor */}
-                      <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4">
-                        <div>
-                          <div className="font-semibold">Связи</div>
-                          <div className="mt-2 text-xs text-slate-600">
-                            Удаление связей доступно в карточке человека (пары) или в списке ниже (родитель-ребёнок).
-                          </div>
-                        </div>
+                      <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <input value={personForm.lastName} onChange={(e) => setPersonForm(f => ({ ...f, lastName: e.target.value }))} placeholder="Фамилия"
+                          className="border border-slate-300 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-200" />
+                        <input value={personForm.firstName} onChange={(e) => setPersonForm(f => ({ ...f, firstName: e.target.value }))} placeholder="Имя"
+                          className="border border-slate-300 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-200" />
 
-                        {/* Marriage */}
-                        <div className="border border-slate-200 rounded-xl p-3">
-                          <div className="text-sm font-semibold">Добавить брак</div>
-                          <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
-                            <select
-                              value={marriageForm.person1Id}
-                              onChange={(e) => setMarriageForm(f => ({ ...f, person1Id: e.target.value }))}
-                              className="border border-slate-300 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-200"
-                            >
-                              <option value="">Человек 1</option>
-                              {peopleSorted.map(p => <option key={p.id} value={p.id}>{fullName(p)}</option>)}
-                            </select>
+                        <select value={personForm.gender} onChange={(e) => setPersonForm(f => ({ ...f, gender: e.target.value }))}
+                          className="border border-slate-300 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-200">
+                          <option value="U">Пол: не указан</option>
+                          <option value="M">М</option>
+                          <option value="F">Ж</option>
+                        </select>
 
-                            <select
-                              value={marriageForm.person2Id}
-                              onChange={(e) => setMarriageForm(f => ({ ...f, person2Id: e.target.value }))}
-                              className="border border-slate-300 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-200"
-                            >
-                              <option value="">Человек 2</option>
-                              {peopleSorted.map(p => <option key={p.id} value={p.id}>{fullName(p)}</option>)}
-                            </select>
+                        <input type="date" value={personForm.birthDate} onChange={(e) => setPersonForm(f => ({ ...f, birthDate: e.target.value }))}
+                          className="border border-slate-300 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-200" />
 
-                            <input
-                              type="date"
-                              value={marriageForm.marriageDate}
-                              onChange={(e) => setMarriageForm(f => ({ ...f, marriageDate: e.target.value }))}
-                              className="border border-slate-300 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-200"
-                              title="Дата брака"
-                            />
+                        <input type="date" value={personForm.deathDate} onChange={(e) => setPersonForm(f => ({ ...f, deathDate: e.target.value }))}
+                          className="border border-slate-300 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-200" />
 
-                            <input
-                              type="date"
-                              value={marriageForm.divorceDate}
-                              onChange={(e) => setMarriageForm(f => ({ ...f, divorceDate: e.target.value }))}
-                              className="border border-slate-300 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-200"
-                              title="Дата развода (если есть)"
-                            />
-                          </div>
-                          <button onClick={addMarriage} className="mt-2 px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-medium">
-                            Добавить брак
+                        <textarea value={personForm.notes} onChange={(e) => setPersonForm(f => ({ ...f, notes: e.target.value }))}
+                          placeholder="Заметки (необязательно)" rows="3"
+                          className="md:col-span-2 border border-slate-300 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-200" />
+                      </div>
+
+                      <div className="mt-3 flex gap-2">
+                        <button onClick={savePerson} className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-medium">Сохранить</button>
+                        <button onClick={startCreatePerson} className="px-4 py-2 rounded-xl bg-slate-100 border border-slate-200 text-sm">Очистить</button>
+                        {selectedPerson && (
+                          <button onClick={() => startEditPerson(selectedPerson)} className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm">
+                            В форму: выбранного
                           </button>
+                        )}
+                      </div>
+
+                      <div className="mt-2 text-xs text-slate-600">Сначала добавь людей, потом связи.</div>
+                    </div>
+
+                    {/* Relationships editor */}
+                    <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4">
+                      <div>
+                        <div className="font-semibold">Связи</div>
+                        <div className="mt-2 text-xs text-slate-600">Удаление брака — в карточке человека (Пары) или ниже (родитель-ребёнок).</div>
+                      </div>
+
+                      <div className="border border-slate-200 rounded-xl p-3">
+                        <div className="text-sm font-semibold">Добавить брак</div>
+                        <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
+                          <select value={marriageForm.person1Id} onChange={(e) => setMarriageForm(f => ({ ...f, person1Id: e.target.value }))}
+                            className="border border-slate-300 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-200">
+                            <option value="">Человек 1</option>
+                            {peopleSorted.map(p => <option key={p.id} value={p.id}>{fullName(p)}</option>)}
+                          </select>
+
+                          <select value={marriageForm.person2Id} onChange={(e) => setMarriageForm(f => ({ ...f, person2Id: e.target.value }))}
+                            className="border border-slate-300 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-200">
+                            <option value="">Человек 2</option>
+                            {peopleSorted.map(p => <option key={p.id} value={p.id}>{fullName(p)}</option>)}
+                          </select>
+
+                          <input type="date" value={marriageForm.marriageDate} onChange={(e) => setMarriageForm(f => ({ ...f, marriageDate: e.target.value }))}
+                            className="border border-slate-300 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-200" />
+                          <input type="date" value={marriageForm.divorceDate} onChange={(e) => setMarriageForm(f => ({ ...f, divorceDate: e.target.value }))}
+                            className="border border-slate-300 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-200" />
                         </div>
+                        <button onClick={addMarriage} className="mt-2 px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-medium">Добавить брак</button>
+                      </div>
 
-                        {/* Parent-child */}
-                        <div className="border border-slate-200 rounded-xl p-3">
-                          <div className="text-sm font-semibold">Добавить связь родитель-ребёнок</div>
-                          <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
-                            <select
-                              value={pcForm.parentId}
-                              onChange={(e) => setPcForm(f => ({ ...f, parentId: e.target.value }))}
-                              className="border border-slate-300 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-200"
-                            >
-                              <option value="">Родитель</option>
-                              {peopleSorted.map(p => <option key={p.id} value={p.id}>{fullName(p)}</option>)}
-                            </select>
+                      <div className="border border-slate-200 rounded-xl p-3">
+                        <div className="text-sm font-semibold">Добавить связь родитель-ребёнок</div>
+                        <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
+                          <select value={pcForm.parentId} onChange={(e) => setPcForm(f => ({ ...f, parentId: e.target.value }))}
+                            className="border border-slate-300 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-200">
+                            <option value="">Родитель</option>
+                            {peopleSorted.map(p => <option key={p.id} value={p.id}>{fullName(p)}</option>)}
+                          </select>
 
-                            <select
-                              value={pcForm.childId}
-                              onChange={(e) => setPcForm(f => ({ ...f, childId: e.target.value }))}
-                              className="border border-slate-300 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-200"
-                            >
-                              <option value="">Ребёнок</option>
-                              {peopleSorted.map(p => <option key={p.id} value={p.id}>{fullName(p)}</option>)}
-                            </select>
-                          </div>
-                          <button onClick={addParentChild} className="mt-2 px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-medium">
-                            Добавить связь
-                          </button>
+                          <select value={pcForm.childId} onChange={(e) => setPcForm(f => ({ ...f, childId: e.target.value }))}
+                            className="border border-slate-300 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-200">
+                            <option value="">Ребёнок</option>
+                            {peopleSorted.map(p => <option key={p.id} value={p.id}>{fullName(p)}</option>)}
+                          </select>
                         </div>
+                        <button onClick={addParentChild} className="mt-2 px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-medium">Добавить связь</button>
+                      </div>
 
-                        {/* Parent-child list */}
-                        <div className="border border-slate-200 rounded-xl p-3">
-                          <div className="text-sm font-semibold">Существующие родитель-ребёнок</div>
-                          <div className="mt-2 max-h-48 overflow-auto space-y-2 pr-1">
-                            {parentChildLinks.map(r => {
-                              const parent = peopleById.get(r.parentId);
-                              const child = peopleById.get(r.childId);
-                              if (!parent || !child) return null;
-                              return (
-                                <div key={r.id} className="flex items-center gap-2 text-sm">
-                                  <button onClick={() => setSelectedPersonId(parent.id)} className="text-indigo-700 hover:underline">{fullName(parent)}</button>
-                                  <span className="text-slate-400">→</span>
-                                  <button onClick={() => setSelectedPersonId(child.id)} className="text-indigo-700 hover:underline">{fullName(child)}</button>
-                                  <button onClick={() => deleteRelationship(r.id)} className="ml-auto text-xs text-red-600 hover:underline">
-                                    удалить
-                                  </button>
-                                </div>
-                              );
-                            })}
-                            {parentChildLinks.length === 0 && <div className="text-sm text-slate-600">Пока нет связей.</div>}
-                          </div>
+                      <div className="border border-slate-200 rounded-xl p-3">
+                        <div className="text-sm font-semibold">Существующие родитель-ребёнок</div>
+                        <div className="mt-2 max-h-48 overflow-auto space-y-2 pr-1">
+                          {parentChildLinks.map(r => {
+                            const parent = peopleById.get(r.parentId);
+                            const child = peopleById.get(r.childId);
+                            if (!parent || !child) return null;
+                            return (
+                              <div key={r.id} className="flex items-center gap-2 text-sm">
+                                <button onClick={() => setSelectedPersonId(parent.id)} className="text-indigo-700 hover:underline">{fullName(parent)}</button>
+                                <span className="text-slate-400">→</span>
+                                <button onClick={() => setSelectedPersonId(child.id)} className="text-indigo-700 hover:underline">{fullName(child)}</button>
+                                <button onClick={() => deleteRelationship(r.id)} className="ml-auto text-xs text-red-600 hover:underline">удалить</button>
+                              </div>
+                            );
+                          })}
+                          {parentChildLinks.length === 0 && <div className="text-sm text-slate-600">Пока нет связей.</div>}
                         </div>
                       </div>
                     </div>
-                  )}
-                </>
-              )}
+                  </div>
+                )}
+              </>
+            )
+          )}
 
-              {/* Footer note */}
-              <div className="text-xs text-slate-500 px-1">
-                Данные (люди/связи/комментарии) хранятся в localStorage этого браузера. Для общего доступа всем нужен сервер или облачная база.
-              </div>
-            </div>
+          <div className="text-xs text-slate-500 px-1">
+            Данные хранятся в localStorage этого браузера (без сервера). Для общих данных всем — нужен Firebase/Supabase.
           </div>
         </div>
-      );
-    }
+      </div>
+    </div>
+  );
+}
 
-    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
-  </script>
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
 </body>
 </html>
-
