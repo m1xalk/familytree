@@ -143,6 +143,23 @@
       height: 12px;
       background: #cbd5e1;
     }
+    /* Якорь: линия от родителей к карточке ребёнка (а не к сердечку) */
+    .coupleRowAnchored{
+      display: inline-flex;
+      align-items: center;
+      gap: 16px;
+      position: relative;
+      padding-top: 22px; /* место для верхнего «перевода» линии */
+      padding-bottom: 12px;
+    }
+    .coupleRowAnchored .anchorOverlay{
+      position:absolute;
+      left:0; top:0;
+      width:100%;
+      height:22px;
+      pointer-events:none;
+    }
+
 
     .coupleMid {
       width: 38px; height: 38px; border-radius: 999px;
@@ -959,9 +976,19 @@
       return (
         <>
           <div className="coupleContainer">
-            {showOnlyPartner ? (
-              // Показываем только сердечко + партнер (не самого человека)
-              <div className="coupleRowChild">
+            {focusPersonId ? (
+              <AnchoredCoupleRow
+                child={p1?.id === focusPersonId ? p1 : p2}
+                partner={p1?.id === focusPersonId ? p2 : p1}
+                statusIcon={statusIcon}
+                isAdmin={isAdmin}
+                onAddChild={() => isAdmin && onOpenAddChild(couple.id)}
+                onSelect={(id) => id && onSelectPerson(id)}
+              />
+            ) : (
+              <div className="coupleRow">
+                <PersonCardMini person={p1} onClick={() => p1 && onSelectPerson(p1.id)} />
+
                 <div
                   className="coupleMid"
                   title={isAdmin ? "Добавить ребёнка" : "Только админ может менять дерево"}
@@ -970,10 +997,7 @@
                 >
                   {statusIcon}
                 </div>
-                {p1?.id === focusPersonId ? (
-                  <PersonCardMini person={p2} onClick={() => p2 && onSelectPerson(p2.id)} />
-                ) : (
-                  <PersonCardMini person={p1} onClick={() => p1 && onSelectPerson(p1.id)} />
+            )} />
                 )}
               </div>
             ) : (
@@ -1124,7 +1148,80 @@
       );
     }
 
-    // =========================
+    
+function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, onSelect }) {
+  const rowRef = React.useRef(null);
+  const childRef = React.useRef(null);
+  const [geom, setGeom] = React.useState({ w: 0, toX: 0 });
+
+  React.useEffect(() => {
+    let ro = null;
+
+    const measure = () => {
+      const rowEl = rowRef.current;
+      const chEl = childRef.current;
+      if (!rowEl || !chEl) return;
+
+      const r = rowEl.getBoundingClientRect();
+      const c = chEl.getBoundingClientRect();
+      const w = Math.max(1, r.width);
+      const toX = (c.left - r.left) + c.width / 2;
+      setGeom({ w, toX });
+    };
+
+    // первая отрисовка
+    const raf = requestAnimationFrame(measure);
+
+    // реагируем на ресайз
+    if (window.ResizeObserver) {
+      ro = new ResizeObserver(() => measure());
+      ro.observe(rowRef.current);
+    } else {
+      window.addEventListener("resize", measure);
+    }
+
+    return () => {
+      cancelAnimationFrame(raf);
+      if (ro) ro.disconnect();
+      else window.removeEventListener("resize", measure);
+    };
+  }, [child?.id, partner?.id]);
+
+  const fromX = geom.w / 2;
+  const h = 22;
+
+  return (
+    <div className="coupleRowAnchored" ref={rowRef}>
+      <svg className="anchorOverlay" viewBox={`0 0 ${geom.w} ${h}`} preserveAspectRatio="none">
+        <path
+          d={`M ${fromX} 0 V ${h/2} H ${geom.toX} V ${h}`}
+          fill="none"
+          stroke="#cbd5e1"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+
+      <div ref={childRef}>
+        <PersonCardMini person={child} onClick={() => child && onSelect(child.id)} />
+      </div>
+
+      <div
+        className="coupleMid"
+        title={isAdmin ? "Добавить ребёнка" : "Только админ может менять дерево"}
+        aria-disabled={!isAdmin}
+        onClick={() => isAdmin && onAddChild()}
+      >
+        {statusIcon}
+      </div>
+
+      <PersonCardMini person={partner} onClick={() => partner && onSelect(partner.id)} />
+    </div>
+  );
+}
+
+// =========================
     // Modals + Forms
     // =========================
     function Modal({ children, onClose }) {
