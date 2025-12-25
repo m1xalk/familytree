@@ -208,54 +208,48 @@
       .personCard .font-semibold { font-size: 11px; }
       .personCard .text-xs { font-size: 9px; }
     }
-  /* Child-couple connector: make parent line land on the CHILD person's card inside the couple */
-.childCoupleNode::before,
-.childCoupleNode::after { display:none !important; }
+  /* Child-couple: линия родителей должна приходить в ребёнка (внутри пары), без "лишней" вертикали к сердечку */
+.tree li.childCoupleNode::after { border-left: none !important; }
 
-.childCoupleNode > .childCoupleWrap { position: relative; display:inline-block; padding-top:18px; }
+.childCoupleWrap{ position: relative; display:inline-block; width:100%; }
 
-/* vertical from parent to elbow line */
-.childCoupleNode > .childCoupleWrap::before{
+/* вертикаль от узла (центр li=50%) вниз до уровня верхней линии пары (24px) */
+.childCoupleWrap::before{
   content:"";
   position:absolute;
   left:50%;
   top:0;
-  height:18px;
+  height:24px;
   border-left:2px solid #cbd5e1;
   transform: translateX(-1px);
+  pointer-events:none;
 }
 
-/* elbow: from 50% to child's card center (px), then down */
-.childCoupleNode > .childCoupleWrap::after{
+/* L-образная линия: от центра узла (50%) к центру карточки ребёнка, затем вниз (24px) со скруглением */
+.childCoupleWrap::after{
   content:"";
   position:absolute;
   top:0;
-  height:18px;
+  height:24px;
   left:0;
   width:100%;
   pointer-events:none;
-  /* We'll draw two borders: top + left/right depending on direction */
 }
 
-/* default anchor if JS didn't measure yet */
-.childCoupleNode > .childCoupleWrap{ --anchor-px: 50%; }
-
-/* anchor left of center */
-.childCoupleNode > .childCoupleWrap[data-side="left"]::after{
-  left: var(--anchor-px);
-  width: calc(50% - var(--anchor-px));
+.childCoupleWrap{ --child-x: 50%; }
+.childCoupleWrap[data-side="left"]::after{
+  left: var(--child-x);
+  width: calc(50% - var(--child-x));
   border-top:2px solid #cbd5e1;
   border-left:2px solid #cbd5e1;
-  border-top-left-radius: 12px;
+  border-top-left-radius:12px;
 }
-
-/* anchor right of center */
-.childCoupleNode > .childCoupleWrap[data-side="right"]::after{
+.childCoupleWrap[data-side="right"]::after{
   left: 50%;
-  width: calc(var(--anchor-px) - 50%);
+  width: calc(var(--child-x) - 50%);
   border-top:2px solid #cbd5e1;
   border-right:2px solid #cbd5e1;
-  border-top-right-radius: 12px;
+  border-top-right-radius:12px;
 }
 </style>
 </head>
@@ -264,7 +258,7 @@
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useEffect, useMemo, useState } = React;
+    const { useEffect, useMemo, useState, useRef } = React;
 
     // =========================
     // FIREBASE CONFIG
@@ -990,6 +984,30 @@
       const p1 = people.find(p => p.id === couple.partner1Id) || null;
       const p2 = people.find(p => p.id === couple.partner2Id) || null;
 
+      const wrapRef = useRef(null);
+      const p1Ref = useRef(null);
+      const p2Ref = useRef(null);
+
+      useEffect(() => {
+        if (!focusPersonId) return;
+        const wrap = wrapRef.current;
+        const target = (p1?.id === focusPersonId ? p1Ref.current : (p2?.id === focusPersonId ? p2Ref.current : null));
+        if (!wrap || !target) return;
+
+        const measure = () => {
+          const wb = wrap.getBoundingClientRect();
+          const tb = target.getBoundingClientRect();
+          const centerPx = (tb.left + tb.width / 2) - wb.left;
+          const pct = (centerPx / wb.width) * 100;
+          wrap.style.setProperty("--child-x", pct.toFixed(4) + "%");
+          wrap.dataset.side = centerPx < wb.width / 2 ? "left" : "right";
+        };
+
+        measure();
+        window.addEventListener("resize", measure);
+        return () => window.removeEventListener("resize", measure);
+      }, [focusPersonId, p1?.id, p2?.id]);
+
       const statusIcon = couple.status === "divorced" ? "💔" : "❤️";
 
       const children = (couple.childrenIds || [])
@@ -1027,7 +1045,10 @@
               </div>
             ) : (
               // Обычная пара - показываем обоих
-              <div className="coupleRow" ref={renderAsChildCouple ? wrapRef : undefined}>
+              {focusPersonId ? (
+            <div className="childCoupleWrap" ref={wrapRef}>
+              <div className="coupleRow">
+
                 <PersonCardMini person={p1} onClick={() => p1 && onSelectPerson(p1.id)} />
                 
                 <div
@@ -1103,7 +1124,7 @@
 
       if (!personCouples.length) {
         return (
-          <li>
+          <li className="childCoupleNode">
             <div className="flex flex-col items-center gap-2">
               <PersonCardMini person={person} onClick={() => onSelectPerson(person.id)} />
             </div>
@@ -1111,11 +1132,9 @@
         );
       }
 
-      // Показываем именно парой (как у корней), но линию родителей "прибиваем" к центру карточки ребёнка внутри пары.
-      // Для этого оборачиваем в childCoupleNode и передаём focusPersonId.
       return (
-        <li className="childCoupleNode">
-          <div className="childCoupleWrap">
+        <li>
+          <div className="flex flex-col items-center gap-3">
             {personCouples.map((c) => (
               <div key={c.id} className="w-full">
                 <TreeCoupleContent
@@ -1133,7 +1152,6 @@
                   depth={depth + 1}
                   path={new Set([...path, person.id])}
                   focusPersonId={person.id}
-                  renderAsChildCouple={true}
                 />
               </div>
             ))}
