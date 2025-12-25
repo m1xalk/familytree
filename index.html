@@ -990,7 +990,6 @@ function TreePersonNode({
         <li>
           <div className="flex flex-col items-center gap-2">
             <PersonCardMini person={person} onClick={() => onSelectPerson(person.id)} />
-            <div className="text-[11px] text-slate-500">{yearRange(person.birthDate, person.deathDate)}</div>
           </div>
 
           {personCouples.length > 0 && (
