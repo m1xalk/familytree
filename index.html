@@ -209,27 +209,18 @@
       .personCard .text-xs { font-size: 9px; }
     }
   
-        /* Линии к "ребёнок + супруг(а)" — привязываем к ребёнку (а не к центру пары).
-       Делаем так: вертикаль идёт в центр узла (50%), потом по верху уходит к центру карточки ребёнка,
-       и оттуда опускается вниз с таким же закруглением, как у остальных линий. */
+            /* Линии к "ребёнок + супруг(а)" — привязываем к ребёнку.
+       Нужно как на (красной) схеме: от узла (центр, 50%) идём по верху к центру карточки ребёнка,
+       затем вниз с таким же скруглением, как у остальных.
+       Важно: убираем ВСЕ стандартные линии CSS-дерева для этого вложенного блока, чтобы не было "синих" лишних линий. */
+    .childCoupleUl::before { display: none !important; }
     .childCoupleLi::before,
     .childCoupleLi::after { display: none !important; }
 
-    .childCoupleWrap { position: relative; padding-top: 18px; }
-
-    /* вертикальная линия от родительского узла в центр (50%) */
-    .childCoupleWrap::before{
-      content:"";
-      position:absolute;
-      left:50%;
-      top:0;
-      height:18px;
-      border-left:2px solid #cbd5e1;
-      transform: translateX(-1px);
-    }
+    .childCoupleWrap { position: relative; padding-top: 0; }
 
     /* L-образная линия: от центра узла (50%) к центру карточки ребёнка, затем вниз */
-    .childCoupleWrap::after{
+    .childCoupleWrap::before{
       content:"";
       position:absolute;
       top:0;
@@ -238,7 +229,8 @@
       pointer-events: none;
     }
 
-    .childCoupleWrap[data-anchor="left"]::after{
+    /* ребёнок слева: горизонталь 50% -> anchorX, потом вниз по левому краю псевдоэлемента */
+    .childCoupleWrap[data-anchor="left"]::before{
       left: var(--anchor-x, 25%);
       width: calc(50% - var(--anchor-x, 25%));
       border-top: 2px solid #cbd5e1;
@@ -246,7 +238,8 @@
       border-top-left-radius: 12px;
     }
 
-    .childCoupleWrap[data-anchor="right"]::after{
+    /* ребёнок справа: горизонталь 50% -> anchorX, потом вниз по правому краю псевдоэлемента */
+    .childCoupleWrap[data-anchor="right"]::before{
       left: 50%;
       width: calc(var(--anchor-x, 75%) - 50%);
       border-top: 2px solid #cbd5e1;
@@ -816,7 +809,7 @@
                 </div>
               ) : (
                 <div className="tree">
-                  <ul className="clearfix">
+                  <ul className="clearfix childCoupleUl">
                     {rootCouples.map(c => (
                       <TreeCoupleNode
                         key={c.id}
