@@ -20,7 +20,13 @@
 
   <style>
     /* Дерево */
+    .rootTree { padding-top: 0; margin-top: 0; }
+
     .tree { padding: 12px; overflow: auto; }
+    .treeWrap { position: relative; }
+    .treeOverlay { position:absolute; inset:0; pointer-events:none; }
+    .ghostLink { width: 1px; height: 1px; opacity: 0; }
+
     .tree ul { padding-top: 24px; position: relative; }
     .tree li {
       float: left;
@@ -297,6 +303,11 @@
       const [couples, setCouples] = useState([]);
       const [comments, setComments] = useState([]);
 
+      // Root couples selection (to avoid connecting unrelated top nodes)
+      const [rootCoupleIds, setRootCoupleIds] = useState([]);
+      const [showRootsModal, setShowRootsModal] = useState(false);
+      const [rootsDraft, setRootsDraft] = useState([]);
+
       const [selectedPersonId, setSelectedPersonId] = useState(null);
       const selectedPerson = useMemo(
         () => people.find(p => p.id === selectedPersonId) || null,
@@ -304,6 +315,9 @@
       );
 
       const [expandedCouples, setExpandedCouples] = useState(new Set());
+      // Global render guard to avoid duplicate couple subtrees when branches converge
+      const renderedCouplesRef = React.useRef(new Set());
+
       const [allExpanded, setAllExpanded] = useState(true);
 
       const [viewMode, setViewMode] = useState("tree"); // "tree" или "list"
@@ -343,7 +357,12 @@
           setComments(data);
         });
 
-        setUnsubs([u1, u2, u3]);
+        const u4 = db.collection("settings").doc("tree").onSnapshot((doc) => {
+          const d = doc.exists ? doc.data() : null;
+          setRootCoupleIds(Array.isArray(d?.rootCoupleIds) ? d.rootCoupleIds : []);
+        });
+
+        setUnsubs([u1, u2, u3, u4]);
       };
 
       const refreshAdminFlag = async (u) => {
@@ -373,6 +392,7 @@
           setPeople([]);
           setCouples([]);
           setComments([]);
+          setRootCoupleIds([]);
           setLoading(false);
         });
 
@@ -552,12 +572,103 @@
         return s;
       }, [couples]);
 
-      const rootCouples = useMemo(() => {
+            const rootCouples = useMemo(() => {
+        // If admin selected explicit roots, use them; otherwise fallback to heuristic.
+        if (Array.isArray(rootCoupleIds) && rootCoupleIds.length) {
+          const setIds = new Set(rootCoupleIds);
+          const chosen = couples.filter(c => setIds.has(c.id));
+          return chosen.length ? chosen : couples;
+        }
+
         const roots = couples.filter(c =>
           !personIsChild.has(c.partner1Id) && !personIsChild.has(c.partner2Id)
         );
         return roots.length ? roots : couples;
-      }, [couples, personIsChild]);
+      }, [couples, personIsChild, rootCoupleIds]);
+
+      // Reset "already rendered couples" on any re-render of the tree inputs
+      useEffect(() => {
+        renderedCouplesRef.current = new Set();
+      }, [couples, rootCoupleIds, expandedCouples, allExpanded, searchQuery]);
+
+      // Draw extra connectors for merged couples (when a couple appears under multiple parents)
+      useEffect(() => {
+        const svg = document.getElementById("overlaySvg");
+        if (!svg) return;
+
+        const wrap = svg.parentElement;
+        if (!wrap) return;
+
+        const getBox = () => wrap.getBoundingClientRect();
+
+        const clear = () => { while (svg.firstChild) svg.removeChild(svg.firstChild); };
+
+        const draw = () => {
+          clear();
+
+          const wrapBox = getBox();
+          // Ghost points: where the duplicate would have been in the second branch
+          const ghosts = wrap.querySelectorAll("[data-link-couple-id]");
+          ghosts.forEach((ghostEl) => {
+            const targetId = ghostEl.getAttribute("data-link-couple-id");
+            if (!targetId) return;
+
+            const target = wrap.querySelector(`[data-couple-id="${targetId}"] .coupleRow, [data-couple-id="${targetId}"] .coupleRowAnchored`);
+            if (!target) return;
+
+            const g = ghostEl.getBoundingClientRect();
+            const t = target.getBoundingClientRect();
+
+            const gx = (g.left + g.width / 2) - wrapBox.left;
+            const gy = (g.top + g.height / 2) - wrapBox.top;
+
+            // Connect to top-center of the real couple row (slightly above)
+            const tx = (t.left + t.width / 2) - wrapBox.left;
+            const ty = (t.top) - wrapBox.top;
+
+            const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            const midY = gy + Math.max(20, Math.min(80, (ty - gy) / 2));
+            const d = `M ${gx} ${gy} V ${midY} H ${tx} V ${ty}`;
+            path.setAttribute("d", d);
+            path.setAttribute("fill", "none");
+            path.setAttribute("stroke", "#000000");
+            path.setAttribute("stroke-width", "2");
+            path.setAttribute("stroke-linecap", "round");
+            path.setAttribute("stroke-linejoin", "round");
+            svg.appendChild(path);
+          });
+
+          // Resize svg viewbox
+          svg.setAttribute("width", String(wrapBox.width));
+          svg.setAttribute("height", String(wrapBox.height));
+          svg.setAttribute("viewBox", `0 0 ${wrapBox.width} ${wrapBox.height}`);
+        };
+
+        const rafDraw = () => requestAnimationFrame(draw);
+
+        // Initial draw
+        rafDraw();
+
+        let ro = null;
+        if (window.ResizeObserver) {
+          ro = new ResizeObserver(() => rafDraw());
+          ro.observe(wrap);
+        } else {
+          window.addEventListener("resize", rafDraw);
+        }
+
+        // Also redraw on scroll inside tree container
+        const tree = wrap.querySelector(".tree");
+        const onScroll = () => rafDraw();
+        if (tree) tree.addEventListener("scroll", onScroll, { passive: true });
+
+        return () => {
+          clear();
+          if (ro) ro.disconnect();
+          else window.removeEventListener("resize", rafDraw);
+          if (tree) tree.removeEventListener("scroll", onScroll);
+        };
+      }, [couples, rootCoupleIds, expandedCouples, allExpanded, searchQuery]);
 
       const couplesByPerson = useMemo(() => {
         const map = new Map();
@@ -824,12 +935,23 @@
                   </button>
 
                   {viewMode === "tree" && (
-                    <button
-                      onClick={toggleAllExpanded}
+                    <>
+                      {isAdmin && (
+                        <button
+                          onClick={() => { setRootsDraft(rootCoupleIds || []); setShowRootsModal(true); }}
+                          className="px-3 py-1 rounded-lg bg-amber-100 text-amber-800 hover:bg-amber-200 text-xs font-medium transition-all"
+                          title="Выбрать корневые пары (чтобы сверху не связывались неродственные ветки)"
+                        >
+                          ⚓ Корни
+                        </button>
+                      )}
+                      <button
+                        onClick={toggleAllExpanded}
                       className="px-3 py-1 rounded-lg bg-purple-100 text-purple-700 hover:bg-purple-200 text-xs font-medium transition-all"
                     >
                       {allExpanded ? "➖ Свернуть всё" : "➕ Развернуть всё"}
                     </button>
+                    </>
                   )}
                 </div>
               </div>
@@ -847,6 +969,7 @@
               {people.length === 0 ? (
                 <div className="p-8 text-center text-slate-600">
                   Пока пусто. {isAdmin && "Добавь людей и пары."}
+                </div>
                 </div>
               ) : viewMode === "list" ? (
                 <div className="space-y-2">
@@ -886,11 +1009,12 @@
                   Есть люди, но нет пар. {isAdmin && "Добавь пару, чтобы построить дерево."}
                 </div>
               ) : (
-                <div className="tree">
-                  <ul className="clearfix">
-                    {rootCouples.map(c => (
+                <div className="treeWrap">
+                <svg className="treeOverlay" id="overlaySvg"></svg>
+                <div className="tree space-y-10">
+                  {rootCouples.map(c => (
+                    <ul key={c.id} className="clearfix rootTree">
                       <TreeCoupleNode
-                        key={c.id}
                         couple={c}
                         people={people}
                         couples={couples}
@@ -905,9 +1029,10 @@
                         depth={0}
                         path={new Set()}
                         searchQuery={searchQuery}
+                        renderedCouplesRef={renderedCouplesRef}
                       />
-                    ))}
-                  </ul>
+                    </ul>
+                  ))}
                 </div>
               )}
             </section>
@@ -979,6 +1104,25 @@
             />
           )}
 
+          {showRootsModal && isAdmin && (
+            <RootsModal
+              people={people}
+              couples={couples}
+              draft={rootsDraft}
+              setDraft={setRootsDraft}
+              onClose={() => setShowRootsModal(false)}
+              onSave={async () => {
+                try {
+                  const cleaned = Array.from(new Set((rootsDraft || []).filter(Boolean)));
+                  await db.collection("settings").doc("tree").set({ rootCoupleIds: cleaned }, { merge: true });
+                  setShowRootsModal(false);
+                } catch (e) {
+                  alert("Не удалось сохранить корни: " + (e?.message || e));
+                }
+              }}
+            />
+          )}
+
           {addChildModal.open && (
             <AddChildModal
               people={people}
@@ -1024,7 +1168,8 @@
       toggleCoupleExpanded,
       onSelectPerson, isAdmin, onOpenAddChild,
       onDeleteCouple, onDetachChild,
-      depth, path, searchQuery = ""
+      depth, path, searchQuery = "",
+      renderedCouplesRef
     }) {
       return (
         <li>
@@ -1043,6 +1188,7 @@
             depth={depth}
             path={path}
             searchQuery={searchQuery}
+            renderedCouplesRef={renderedCouplesRef}
           />
         </li>
       );
@@ -1056,10 +1202,31 @@
       onDeleteCouple, onDetachChild,
       depth, path,
       focusPersonId = null,
-      searchQuery = ""
+      searchQuery = "",
+      renderedCouplesRef
     }) {
       const p1 = people.find(p => p.id === couple.partner1Id) || null;
       const p2 = people.find(p => p.id === couple.partner2Id) || null;
+
+            // Avoid duplicate rendering of the same couple subtree (DAG -> tree)
+      // If this couple was already rendered elsewhere, we keep a hidden "ghost" node here
+      // and draw an extra SVG connector from this ghost position to the real couple.
+      if (renderedCouplesRef?.current) {
+        const already = renderedCouplesRef.current.has(couple.id);
+        if (already && depth > 0) {
+          return (
+            <div className="coupleContainer" data-couple-id={couple.id}>
+              <div className="coupleRow">
+                <div className="ghostLink" data-link-couple-id={couple.id} />
+              </div>
+            </div>
+          );
+        }
+        renderedCouplesRef.current.add(couple.id);
+      }
+
+        if (!already) renderedCouplesRef.current.add(couple.id);
+      }
 
       const statusIcon = couple.status === "divorced" ? "💔" : "❤️";
 
@@ -1192,16 +1359,9 @@
       toggleCoupleExpanded,
       onSelectPerson, isAdmin,
       onOpenAddChild, onDeleteCouple, onDetachChild,
-      depth, path, searchQuery = ""
+      depth, path, searchQuery = "",
+      renderedCouplesRef
     }) {
-      // ⛔ Не дублируем одного и того же человека в одной ветке дерева
-      if (path && path.has(person.id)) {
-        return null;
-      }
-
-      const nextPath = new Set(path || []);
-      nextPath.add(person.id);
-
       const personCouples = (couplesByPerson.get(person.id) || []);
 
       return (
@@ -1227,9 +1387,10 @@
                     onDeleteCouple={onDeleteCouple}
                     onDetachChild={onDetachChild}
                     depth={depth + 1}
-                    path={nextPath}
+                    path={new Set([...path, person.id])}
                     focusPersonId={person.id}
                     searchQuery={searchQuery}
+                    renderedCouplesRef={renderedCouplesRef}
                   />
                 </li>
               ))}
@@ -1808,7 +1969,74 @@ function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, on
       );
     }
 
-    // render
+
+    function RootsModal({ people, couples, draft, setDraft, onClose, onSave }) {
+      const nameOf = (id) => {
+        const p = people.find(x => x.id === id);
+        return p ? safeName(p) : "—";
+      };
+
+      const toggle = (coupleId) => {
+        setDraft(prev => {
+          const s = new Set(prev || []);
+          s.has(coupleId) ? s.delete(coupleId) : s.add(coupleId);
+          return Array.from(s);
+        });
+      };
+
+      return (
+        <Modal onClose={onClose}>
+          <div className="text-lg font-semibold mb-2">Корневые пары</div>
+          <div className="text-sm text-slate-600 mb-4">
+            Выбери пары, с которых начинается дерево. Это убирает «связи» между неродственными верхними ветками.
+          </div>
+
+          <div className="space-y-2 max-h-[55vh] overflow-y-auto pr-1">
+            {couples.length === 0 ? (
+              <div className="text-slate-600">Пока нет пар.</div>
+            ) : (
+              couples.map(c => {
+                const checked = (draft || []).includes(c.id);
+                return (
+                  <label key={c.id} className="flex items-start gap-3 p-3 border rounded-xl hover:bg-slate-50 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="mt-1"
+                      checked={checked}
+                      onChange={() => toggle(c.id)}
+                    />
+                    <div className="min-w-0">
+                      <div className="font-semibold text-slate-900">
+                        {nameOf(c.partner1Id)} {c.status === "divorced" ? "💔" : "❤️"} {nameOf(c.partner2Id)}
+                      </div>
+                      <div className="text-xs text-slate-600">
+                        Дети: {(c.childrenIds || []).length}
+                      </div>
+                    </div>
+                  </label>
+                );
+              })
+            )}
+          </div>
+
+          <div className="mt-4 flex gap-2">
+            <button onClick={onSave} className="flex-1 px-3 py-2 rounded-xl bg-amber-600 text-white hover:bg-amber-700">
+              Сохранить корни
+            </button>
+            <button onClick={onClose} className="flex-1 px-3 py-2 rounded-xl bg-slate-200 text-slate-800 hover:bg-slate-300">
+              Отмена
+            </button>
+          </div>
+
+          <div className="text-xs text-slate-500 mt-3">
+            Если ничего не выбрать, будет использован текущий автоматический алгоритм.
+          </div>
+        </Modal>
+      );
+    }
+
+
+        // render
     const root = ReactDOM.createRoot(document.getElementById("root"));
     root.render(<App />);
   </script>
