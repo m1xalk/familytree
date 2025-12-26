@@ -2022,12 +2022,24 @@ function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, on
               )}
             </div>
 
-            {person.mainPhoto && (
-              <img
-                src={person.mainPhoto}
-                className="w-full h-96 object-cover rounded-3xl mb-6 border cursor-zoom-in"
-                alt="Фото"
-                onClick={() => setLightboxSrc(person.mainPhoto)}
+                        <div className="flex justify-center mt-6 mb-8">
+              {person.mainPhoto ? (
+                <img
+                  src={person.mainPhoto}
+                  alt="Фото"
+                  className="w-48 h-48 rounded-full object-cover border-4 border-white shadow-xl cursor-zoom-in"
+                  onClick={() => setLightboxSrc(person.mainPhoto)}
+                  title="Открыть на весь экран"
+                />
+              ) : (
+                <div
+                  className="w-48 h-48 rounded-full bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center text-white text-6xl font-extrabold shadow-xl"
+                  title="Фото не добавлено"
+                >
+                  {(person.firstName?.[0] || "?").toUpperCase()}
+                </div>
+              )}
+            </div>
                 title="Открыть на весь экран"
               />
             )}
