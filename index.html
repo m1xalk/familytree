@@ -375,6 +375,14 @@
 
       const [addChildModal, setAddChildModal] = useState({ open: false, coupleId: null });
 
+      // Из исходного документа: открытие/закрытие модалки добавления ребёнка
+      const openAddChild = (coupleId) => {
+        if (!isAdmin) return;
+        setAddChildModal({ open: true, coupleId });
+      };
+      const closeAddChild = () => setAddChildModal({ open: false, coupleId: null });
+
+
       const [newComment, setNewComment] = useState("");
 
       const [unsubs, setUnsubs] = useState([]);
