@@ -1225,9 +1225,6 @@
         renderedCouplesRef.current.add(couple.id);
       }
 
-        if (!already) renderedCouplesRef.current.add(couple.id);
-      }
-
       const statusIcon = couple.status === "divorced" ? "💔" : "❤️";
 
       const children = (couple.childrenIds || [])
@@ -1271,7 +1268,7 @@
 
       return (
         <>
-          <div className="coupleContainer">
+          <div className="coupleContainer" data-couple-id={couple.id}>
             {isChildCouple ? (
               <AnchoredCoupleRow
                 child={p1?.id === focusPersonId ? p1 : p2}
