@@ -733,7 +733,15 @@
           for (const c of couples) {
             const l1 = personLevel[c.partner1Id] ?? 0;
             const l2 = personLevel[c.partner2Id] ?? 0;
-            const cl = Math.max(l1, l2);
+            let cl = Math.max(l1, l2);
+            // Если один партнёр — «корневой» (не является чьим‑то ребёнком),
+            // а второй имеет родителей в дереве, то не поднимаем корневого партнёра
+            // на уровень второго. Вместо этого держим пару на более «верхнем» уровне.
+            const p1IsChild = personIsChild.has(c.partner1Id);
+            const p2IsChild = personIsChild.has(c.partner2Id);
+            if (p1IsChild !== p2IsChild) {
+              cl = Math.min(l1, l2);
+            }
             if (coupleLevel[c.id] !== cl) {
               coupleLevel[c.id] = cl;
               changed = true;
