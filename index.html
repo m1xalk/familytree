@@ -230,7 +230,7 @@
   
     /* === Graph SVG links (like index211), behind cards === */
     .tree { position: relative; }
-    .treeLinksSvg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; z-index: 0; }
+    .treeLinksSvg { pointer-events: none !important;  position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; z-index: 0; }
     .coupleContainer, .personCard, .tree li { position: relative; z-index: 10; }
     /* hide old CSS connectors */
     .tree li::before,
@@ -243,6 +243,10 @@
       border: 0 !important;
       background: transparent !important;
     }
+
+  
+    /* Ensure the heart (coupleMid) stays clickable above lines/cards */
+    .coupleMid{ position: relative; z-index: 30; cursor: pointer; pointer-events: auto; }
 
   </style>
 </head>
