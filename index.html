@@ -304,6 +304,10 @@
       );
 
       const [expandedCouples, setExpandedCouples] = useState(new Set());
+      const [allExpanded, setAllExpanded] = useState(true);
+
+      const [viewMode, setViewMode] = useState("tree"); // "tree" или "list"
+      const [searchQuery, setSearchQuery] = useState("");
 
       const [showPersonForm, setShowPersonForm] = useState(false);
       const [editingPerson, setEditingPerson] = useState(null);
@@ -574,6 +578,37 @@
         });
       };
 
+      const toggleAllExpanded = () => {
+        if (allExpanded) {
+          setExpandedCouples(new Set());
+          setAllExpanded(false);
+        } else {
+          const allCoupleIds = new Set(couples.map(c => c.id));
+          setExpandedCouples(allCoupleIds);
+          setAllExpanded(true);
+        }
+      };
+
+      const filteredPeople = useMemo(() => {
+        if (!searchQuery.trim()) return people;
+        
+        const query = searchQuery.toLowerCase().trim();
+        return people.filter(p => {
+          const lastName = (p.lastName || "").toLowerCase();
+          const firstName = (p.firstName || "").toLowerCase();
+          const middleName = (p.middleName || "").toLowerCase();
+          return lastName.includes(query) || firstName.includes(query) || middleName.includes(query);
+        });
+      }, [people, searchQuery]);
+
+      const sortedPeopleByAge = useMemo(() => {
+        return [...filteredPeople].sort((a, b) => {
+          const yearA = a.birthDate ? new Date(a.birthDate).getFullYear() : 9999;
+          const yearB = b.birthDate ? new Date(b.birthDate).getFullYear() : 9999;
+          return yearA - yearB;
+        });
+      }, [filteredPeople]);
+
       const openAddChild = (coupleId) => {
         if (!isAdmin) return;
         setAddChildModal({ open: true, coupleId });
@@ -762,24 +797,89 @@
             )}
 
             <section className="bg-white border rounded-2xl p-4 shadow-lg">
-              <div className="px-2 py-2 flex items-start justify-between gap-3 mb-3">
-                <div>
-                  <div className="text-lg font-semibold text-slate-900">Дерево</div>
+              <div className="px-2 py-2 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-3">
+                <div className="flex-1">
+                  <div className="text-lg font-semibold text-slate-900">
+                    {viewMode === "tree" ? "Дерево" : "Список людей"}
+                  </div>
                   <div className="text-xs text-slate-500">
-                    {isAdmin
-                      ? "Нажми на «Дети», чтобы свернуть/развернуть поколения. ❤️/💔 — добавить ребёнка."
-                      : "Нажимай «Дети», чтобы свернуть/развернуть поколения. Карточка → детали."}
+                    {viewMode === "tree" 
+                      ? (isAdmin
+                          ? "Нажми на «Дети», чтобы свернуть/развернуть поколения. ❤️/💔 — добавить ребёнка."
+                          : "Нажимай «Дети», чтобы свернуть/развернуть поколения. Карточка → детали.")
+                      : "Список людей отсортирован от старших к младшим по году рождения"}
                   </div>
                 </div>
 
-                <div className="text-xs text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
-                  {people.length} людей • {couples.length} пар
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="text-xs text-slate-500 bg-slate-100 px-3 py-1 rounded-full whitespace-nowrap">
+                    {people.length} людей • {couples.length} пар
+                  </div>
+                  
+                  <button
+                    onClick={() => setViewMode(viewMode === "tree" ? "list" : "tree")}
+                    className="px-3 py-1 rounded-lg bg-indigo-100 text-indigo-700 hover:bg-indigo-200 text-xs font-medium transition-all"
+                  >
+                    {viewMode === "tree" ? "📋 Список" : "🌳 Дерево"}
+                  </button>
+
+                  {viewMode === "tree" && (
+                    <button
+                      onClick={toggleAllExpanded}
+                      className="px-3 py-1 rounded-lg bg-purple-100 text-purple-700 hover:bg-purple-200 text-xs font-medium transition-all"
+                    >
+                      {allExpanded ? "➖ Свернуть всё" : "➕ Развернуть всё"}
+                    </button>
+                  )}
                 </div>
+              </div>
+
+              <div className="mb-4">
+                <input
+                  type="text"
+                  placeholder="🔍 Поиск по фамилии, имени или отчеству..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full px-4 py-2 border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
+                />
               </div>
 
               {people.length === 0 ? (
                 <div className="p-8 text-center text-slate-600">
                   Пока пусто. {isAdmin && "Добавь людей и пары."}
+                </div>
+              ) : viewMode === "list" ? (
+                <div className="space-y-2">
+                  {sortedPeopleByAge.length === 0 ? (
+                    <div className="p-8 text-center text-slate-600">
+                      Никого не найдено по запросу "{searchQuery}"
+                    </div>
+                  ) : (
+                    sortedPeopleByAge.map(person => (
+                      <div 
+                        key={person.id}
+                        onClick={() => setSelectedPersonId(person.id)}
+                        className="flex items-center gap-3 p-3 border rounded-xl hover:bg-slate-50 cursor-pointer transition-all"
+                      >
+                        {person.mainPhoto ? (
+                          <img className="w-12 h-12 rounded-full object-cover" src={person.mainPhoto} alt="Фото" />
+                        ) : (
+                          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center text-white font-bold">
+                            {((person.firstName?.[0] || "?") + (person.lastName?.[0] || "")).toUpperCase()}
+                          </div>
+                        )}
+                        
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold text-slate-900">
+                            {person.lastName} {person.firstName} {person.middleName}
+                          </div>
+                          <div className="text-xs text-slate-600">
+                            {person.gender === "F" ? "♀" : "♂"} {yearRange(person.birthDate, person.deathDate)}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               ) : couples.length === 0 ? (
                 <div className="p-8 text-center text-slate-600">
@@ -804,6 +904,7 @@
                         onDetachChild={(coupleId, childId) => detachChild(coupleId, childId)}
                         depth={0}
                         path={new Set()}
+                        searchQuery={searchQuery}
                       />
                     ))}
                   </ul>
@@ -923,7 +1024,7 @@
       toggleCoupleExpanded,
       onSelectPerson, isAdmin, onOpenAddChild,
       onDeleteCouple, onDetachChild,
-      depth, path
+      depth, path, searchQuery = ""
     }) {
       return (
         <li>
@@ -941,6 +1042,7 @@
             onDetachChild={onDetachChild}
             depth={depth}
             path={path}
+            searchQuery={searchQuery}
           />
         </li>
       );
@@ -953,7 +1055,8 @@
       onSelectPerson, isAdmin, onOpenAddChild,
       onDeleteCouple, onDetachChild,
       depth, path,
-      focusPersonId = null
+      focusPersonId = null,
+      searchQuery = ""
     }) {
       const p1 = people.find(p => p.id === couple.partner1Id) || null;
       const p2 = people.find(p => p.id === couple.partner2Id) || null;
@@ -964,6 +1067,19 @@
         .map(id => people.find(p => p.id === id))
         .filter(Boolean);
 
+      // Фильтрация детей по поисковому запросу
+      const filteredChildren = useMemo(() => {
+        if (!searchQuery.trim()) return children;
+        
+        const query = searchQuery.toLowerCase().trim();
+        return children.filter(child => {
+          const lastName = (child.lastName || "").toLowerCase();
+          const firstName = (child.firstName || "").toLowerCase();
+          const middleName = (child.middleName || "").toLowerCase();
+          return lastName.includes(query) || firstName.includes(query) || middleName.includes(query);
+        });
+      }, [children, searchQuery]);
+
       const isExpanded = expandedCouples.has(couple.id);
 
       const nextPath = new Set(path);
@@ -972,6 +1088,19 @@
 
       // Если это пара ребёнка (focusPersonId задан), используем якорную структуру
       const isChildCouple = focusPersonId && (p1?.id === focusPersonId || p2?.id === focusPersonId);
+
+      // Проверяем, соответствуют ли партнеры поисковому запросу
+      const matchesSearch = (person) => {
+        if (!searchQuery.trim()) return true;
+        const query = searchQuery.toLowerCase().trim();
+        const lastName = (person?.lastName || "").toLowerCase();
+        const firstName = (person?.firstName || "").toLowerCase();
+        const middleName = (person?.middleName || "").toLowerCase();
+        return lastName.includes(query) || firstName.includes(query) || middleName.includes(query);
+      };
+
+      const p1Matches = matchesSearch(p1);
+      const p2Matches = matchesSearch(p2);
 
       return (
         <>
@@ -984,10 +1113,14 @@
                 isAdmin={isAdmin}
                 onAddChild={() => isAdmin && onOpenAddChild(couple.id)}
                 onSelect={(id) => id && onSelectPerson(id)}
+                p1Matches={p1?.id === focusPersonId ? p1Matches : p2Matches}
+                p2Matches={p1?.id === focusPersonId ? p2Matches : p1Matches}
               />
             ) : (
               <div className="coupleRow">
-                <PersonCardMini person={p1} onClick={() => p1 && onSelectPerson(p1.id)} />
+                <div style={{ opacity: p1Matches ? 1 : 0.3 }}>
+                  <PersonCardMini person={p1} onClick={() => p1 && onSelectPerson(p1.id)} />
+                </div>
 
                 <div
                   className="coupleMid"
@@ -998,7 +1131,9 @@
                   {statusIcon}
                 </div>
 
-                <PersonCardMini person={p2} onClick={() => p2 && onSelectPerson(p2.id)} />
+                <div style={{ opacity: p2Matches ? 1 : 0.3 }}>
+                  <PersonCardMini person={p2} onClick={() => p2 && onSelectPerson(p2.id)} />
+                </div>
               </div>
             )}
 
@@ -1024,9 +1159,9 @@
             </div>
           </div>
 
-          {children.length > 0 && isExpanded && (
+          {filteredChildren.length > 0 && isExpanded && (
             <ul className="clearfix">
-              {children.map(ch => (
+              {filteredChildren.map(ch => (
                 <TreePersonNode
                   key={ch.id}
                   person={ch}
@@ -1042,6 +1177,7 @@
                   onDetachChild={onDetachChild}
                   depth={depth + 1}
                   path={nextPath}
+                  searchQuery={searchQuery}
                 />
               ))}
             </ul>
@@ -1056,7 +1192,7 @@
       toggleCoupleExpanded,
       onSelectPerson, isAdmin,
       onOpenAddChild, onDeleteCouple, onDetachChild,
-      depth, path
+      depth, path, searchQuery = ""
     }) {
       const personCouples = (couplesByPerson.get(person.id) || []);
 
@@ -1085,6 +1221,7 @@
                     depth={depth + 1}
                     path={new Set([...path, person.id])}
                     focusPersonId={person.id}
+                    searchQuery={searchQuery}
                   />
                 </li>
               ))}
@@ -1133,7 +1270,7 @@
     }
 
     
-function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, onSelect }) {
+function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, onSelect, p1Matches = true, p2Matches = true }) {
   const rowRef = React.useRef(null);
   const childRef = React.useRef(null);
   const [geom, setGeom] = React.useState({ w: 0, toX: 0 });
@@ -1187,7 +1324,7 @@ function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, on
         />
       </svg>
 
-      <div ref={childRef}>
+      <div ref={childRef} style={{ opacity: p1Matches ? 1 : 0.3 }}>
         <PersonCardMini person={child} onClick={() => child && onSelect(child.id)} />
       </div>
 
@@ -1200,7 +1337,9 @@ function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, on
         {statusIcon}
       </div>
 
-      <PersonCardMini person={partner} onClick={() => partner && onSelect(partner.id)} />
+      <div style={{ opacity: p2Matches ? 1 : 0.3 }}>
+        <PersonCardMini person={partner} onClick={() => partner && onSelect(partner.id)} />
+      </div>
     </div>
   );
 }
