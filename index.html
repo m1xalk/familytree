@@ -126,7 +126,26 @@
       height: 12px;
       background: #000000;
     }
-/* Якорь: линия от родителей к карточке ребёнка (а не к сердечку) */
+
+    /* Для пары ребенка - линия идет от сердечка */
+    .coupleRowChild {
+      display: inline-flex; 
+      align-items: center; 
+      gap: 16px; 
+      position: relative;
+      padding-bottom: 12px;
+    }
+
+    .coupleRowChild::after {
+      content: "";
+      position: absolute;
+      left: 19px; /* Центр сердечка (38px / 2) */
+      bottom: 0;
+      width: 2px;
+      height: 12px;
+      background: #000000;
+    }
+    /* Якорь: линия от родителей к карточке ребёнка (а не к сердечку) */
     .coupleRowAnchored{
       display: inline-flex;
       align-items: center;
@@ -208,6 +227,23 @@
       .personCard .font-semibold { font-size: 11px; }
       .personCard .text-xs { font-size: 9px; }
     }
+  
+    /* === Graph SVG links (like index211), behind cards === */
+    .tree { position: relative; }
+    .treeLinksSvg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; z-index: 0; }
+    .coupleContainer, .personCard, .tree li { position: relative; z-index: 10; }
+    /* hide old CSS connectors */
+    .tree li::before,
+    .tree li::after,
+    .tree ul ul::before,
+    .coupleRow::after,
+    .coupleRowChild::after {
+      display: none !important;
+      content: none !important;
+      border: 0 !important;
+      background: transparent !important;
+    }
+
   </style>
 </head>
 
@@ -215,7 +251,7 @@
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useEffect, useMemo, useState } = React;
+    const { useEffect, useMemo, useState, useRef, useLayoutEffect } = React;
 
     // =========================
     // FIREBASE CONFIG
@@ -538,7 +574,7 @@
       };
 
       // =========================
-      // Tree helpers
+      // Tree helpers (graph, no duplicates)
       // =========================
       const personIsChild = useMemo(() => {
         const s = new Set();
@@ -546,14 +582,13 @@
         return s;
       }, [couples]);
 
-            const rootCouples = useMemo(() => {
+      const rootCouples = useMemo(() => {
         // If admin selected explicit roots, use them; otherwise fallback to heuristic.
         if (Array.isArray(rootCoupleIds) && rootCoupleIds.length) {
           const setIds = new Set(rootCoupleIds);
           const chosen = couples.filter(c => setIds.has(c.id));
           return chosen.length ? chosen : couples;
         }
-
         const roots = couples.filter(c =>
           !personIsChild.has(c.partner1Id) && !personIsChild.has(c.partner2Id)
         );
@@ -590,68 +625,147 @@
         }
       };
 
-      const filteredPeople = useMemo(() => {
-        if (!searchQuery.trim()) return people;
-        
-        const query = searchQuery.toLowerCase().trim();
-        return people.filter(p => {
-          const lastName = (p.lastName || "").toLowerCase();
-          const firstName = (p.firstName || "").toLowerCase();
-          const middleName = (p.middleName || "").toLowerCase();
-          return lastName.includes(query) || firstName.includes(query) || middleName.includes(query);
+      // =========================
+      // GRAPH LAYOUT (index211-like): compute generations and render each couple once
+      // =========================
+      const graphLevels = useMemo(() => {
+        const personLevel = {};
+        const coupleLevel = {};
+
+        // init
+        for (const p of people) personLevel[p.id] = 0;
+
+        // iterative relaxation (handles multiple parents; avoids recursion depth issues)
+        const maxIter = Math.max(50, (people.length + couples.length) * 2);
+        for (let iter = 0; iter < maxIter; iter++) {
+          let changed = false;
+
+          for (const c of couples) {
+            const l1 = personLevel[c.partner1Id] ?? 0;
+            const l2 = personLevel[c.partner2Id] ?? 0;
+            const cl = Math.max(l1, l2);
+            if (coupleLevel[c.id] !== cl) {
+              coupleLevel[c.id] = cl;
+              changed = true;
+            }
+            const next = cl + 1;
+            for (const ch of (c.childrenIds || [])) {
+              const prev = personLevel[ch] ?? 0;
+              if (next > prev) {
+                personLevel[ch] = next;
+                changed = true;
+              }
+            }
+          }
+
+          if (!changed) break;
+        }
+
+        const maxL = Math.max(0, ...Object.values(personLevel));
+        const rows = Array.from({ length: maxL + 1 }, () => ({ couples: [], singles: [] }));
+
+        // choose which couples to include: if roots defined -> include reachable subgraph; else include all
+        const roots = (rootCouples && rootCouples.length) ? rootCouples : couples;
+        const allowedCoupleIds = new Set();
+        const allowedPersonIds = new Set();
+
+        const byId = new Map(couples.map(c => [c.id, c]));
+        const queue = [...roots.map(r => r.id)];
+        for (const r of roots) {
+          allowedCoupleIds.add(r.id);
+          allowedPersonIds.add(r.partner1Id);
+          allowedPersonIds.add(r.partner2Id);
+        }
+
+        while (queue.length) {
+          const cid = queue.shift();
+          const c = byId.get(cid);
+          if (!c) continue;
+          for (const ch of (c.childrenIds || [])) {
+            allowedPersonIds.add(ch);
+            const childCouples = couplesByPerson.get(ch) || [];
+            for (const cc of childCouples) {
+              if (!allowedCoupleIds.has(cc.id)) {
+                allowedCoupleIds.add(cc.id);
+                allowedPersonIds.add(cc.partner1Id);
+                allowedPersonIds.add(cc.partner2Id);
+                queue.push(cc.id);
+              }
+            }
+          }
+        }
+
+        for (const c of couples) {
+          if (!allowedCoupleIds.has(c.id)) continue;
+          const lvl = coupleLevel[c.id] ?? 0;
+          if (!rows[lvl]) continue;
+          rows[lvl].couples.push(c);
+        }
+
+        const partnered = new Set(couples.flatMap(c => [c.partner1Id, c.partner2Id]));
+        for (const p of people) {
+          if (!allowedPersonIds.has(p.id)) continue;
+          if (partnered.has(p.id)) continue;
+          const lvl = personLevel[p.id] ?? 0;
+          if (!rows[lvl]) continue;
+          rows[lvl].singles.push(p);
+        }
+
+        return { rows, personLevel, coupleLevel, allowedCoupleIds, allowedPersonIds };
+      }, [people, couples, rootCouples, couplesByPerson]);
+
+      // coords for SVG links
+      const treeWrapRef = useRef(null);
+      const [linkCoords, setLinkCoords] = useState({});
+
+      const updateLinkCoords = () => {
+        const wrap = treeWrapRef.current;
+        if (!wrap) return;
+        const rect = wrap.getBoundingClientRect();
+        const next = {};
+
+        wrap.querySelectorAll("[data-couple-anchor]").forEach((el) => {
+          const id = el.getAttribute("data-couple-anchor");
+          const r = el.getBoundingClientRect();
+          next["c-" + id] = { x: (r.left + r.width / 2) - rect.left, y: (r.bottom) - rect.top };
         });
-      }, [people, searchQuery]);
 
-      const sortedPeopleByAge = useMemo(() => {
-        return [...filteredPeople].sort((a, b) => {
-          const yearA = a.birthDate ? new Date(a.birthDate).getFullYear() : 9999;
-          const yearB = b.birthDate ? new Date(b.birthDate).getFullYear() : 9999;
-          return yearA - yearB;
+        wrap.querySelectorAll("[data-person-anchor]").forEach((el) => {
+          const id = el.getAttribute("data-person-anchor");
+          const r = el.getBoundingClientRect();
+          next["p-" + id] = { x: (r.left + r.width / 2) - rect.left, y: (r.top) - rect.top };
         });
-      }, [filteredPeople]);
 
-      const openAddChild = (coupleId) => {
-        if (!isAdmin) return;
-        setAddChildModal({ open: true, coupleId });
-      };
-      const closeAddChild = () => setAddChildModal({ open: false, coupleId: null });
-
-      const createChildAndAttach = async (coupleId, childData) => {
-        if (!isAdmin) return;
-
-        const childId = uid();
-        const child = normalizePerson(childData);
-
-        await db.collection("people").doc(childId).set(child);
-
-        const couple = couples.find(c => c.id === coupleId);
-        const nextChildren = [...new Set([...(couple?.childrenIds || []), childId])];
-
-        await updateCouple(coupleId, { childrenIds: nextChildren });
-
-        setExpandedCouples(prev => new Set([...prev, coupleId]));
-        closeAddChild();
+        setLinkCoords(next);
       };
 
-      const attachExistingChild = async (coupleId, childId) => {
-        if (!isAdmin) return;
+      useLayoutEffect(() => {
+        if (viewMode !== "tree") return;
+        updateLinkCoords();
 
-        const couple = couples.find(c => c.id === coupleId);
-        const nextChildren = [...new Set([...(couple?.childrenIds || []), childId])];
+        let ro = null;
+        const wrap = treeWrapRef.current;
 
-        await updateCouple(coupleId, { childrenIds: nextChildren });
-        setExpandedCouples(prev => new Set([...prev, coupleId]));
-        closeAddChild();
-      };
+        const onResize = () => updateLinkCoords();
+        window.addEventListener("resize", onResize);
 
-      const detachChild = async (coupleId, childId) => {
-        if (!isAdmin) return;
-        const couple = couples.find(c => c.id === coupleId);
-        const nextChildren = (couple?.childrenIds || []).filter(id => id !== childId);
-        await updateCouple(coupleId, { childrenIds: nextChildren });
-      };
+        if (wrap && window.ResizeObserver) {
+          ro = new ResizeObserver(() => updateLinkCoords());
+          ro.observe(wrap);
+        }
+        const t = setTimeout(updateLinkCoords, 250);
+
+        return () => {
+          clearTimeout(t);
+          window.removeEventListener("resize", onResize);
+          if (ro) ro.disconnect();
+        };
+      }, [viewMode, people, couples, graphLevels]);
 
       // =========================
+      // UI states
+      // =========================
+// =========================
       // UI states
       // =========================
       if (loading) {
@@ -898,30 +1012,77 @@
                   Есть люди, но нет пар. {isAdmin && "Добавь пару, чтобы построить дерево."}
                 </div>
               ) : (
-                <div className="tree space-y-10">
-                  {rootCouples.map(c => (
-                    <ul key={c.id} className="clearfix rootTree">
-                      <TreeCoupleNode
-                        couple={c}
-                        people={people}
-                        couples={couples}
-                        couplesByPerson={couplesByPerson}
-                        expandedCouples={expandedCouples}
-                        toggleCoupleExpanded={toggleCoupleExpanded}
-                        onSelectPerson={(id) => setSelectedPersonId(id)}
-                        isAdmin={isAdmin}
-                        onOpenAddChild={(coupleId) => openAddChild(coupleId)}
-                        onDeleteCouple={(coupleId) => deleteCouple(coupleId)}
-                        onDetachChild={(coupleId, childId) => detachChild(coupleId, childId)}
-                        depth={0}
-                        path={new Set()}
-                        searchQuery={searchQuery}
+                <div ref={treeWrapRef} className="tree py-6">
+                <svg className="treeLinksSvg">
+                  {couples.map(c => (c.childrenIds || []).map(childId => {
+                    if (!graphLevels.allowedCoupleIds?.has(c.id)) return null;
+                    if (!graphLevels.allowedPersonIds?.has(childId)) return null;
+                    const start = linkCoords["c-" + c.id];
+                    const end = linkCoords["p-" + childId];
+                    if (!start || !end) return null;
+                    const midY = (start.y + end.y) / 2;
+                    return (
+                      <path
+                        key={c.id + "-" + childId}
+                        d={`M ${start.x} ${start.y} C ${start.x} ${midY}, ${end.x} ${midY}, ${end.x} ${end.y}`}
+                        stroke="#000000"
+                        strokeWidth="2"
+                        fill="none"
+                        className="path-transition"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        vectorEffect="non-scaling-stroke"
                       />
-                    </ul>
+                    );
+                  }))}
+                </svg>
+
+                <div className="w-full flex flex-col items-center gap-20 min-w-max">
+                  {graphLevels.rows.map((row, idx) => (
+                    <div key={idx} className="flex flex-wrap gap-14 justify-center items-start px-10">
+                      {row.couples.map(cp => (
+                        <div key={cp.id} className="coupleContainer" data-couple-anchor={cp.id}>
+                          <div className="coupleRow">
+                            <PersonCardMini person={people.find(p => p.id === cp.partner1Id) || null} onClick={() => setSelectedPersonId(cp.partner1Id)} />
+                            <div
+                              className="coupleMid"
+                              title={isAdmin ? "Добавить ребёнка" : "Только админ может менять дерево"}
+                              aria-disabled={!isAdmin}
+                              onClick={() => isAdmin && openAddChild(cp.id)}
+                            >
+                              {cp.status === "divorced" ? "💔" : "❤️"}
+                            </div>
+                            <PersonCardMini person={people.find(p => p.id === cp.partner2Id) || null} onClick={() => setSelectedPersonId(cp.partner2Id)} />
+                          </div>
+
+                          <div className="mt-2 flex items-center justify-center gap-2">
+                            {(cp.childrenIds || []).length > 0 && (
+                              <span className="text-xs px-2 py-1 rounded-lg bg-slate-100 text-slate-700">
+                                Дети: {(cp.childrenIds || []).length}
+                              </span>
+                            )}
+                            {isAdmin && (
+                              <button
+                                className="text-xs px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200"
+                                onClick={() => deleteCouple(cp.id)}
+                                title="Удалить пару"
+                              >
+                                Удалить
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+
+                      {row.singles.map(p => (
+                        <div key={p.id} className="mt-2" data-person-anchor={p.id}>
+                          <PersonCardMini person={p} onClick={() => setSelectedPersonId(p.id)} />
+                        </div>
+                      ))}
+                    </div>
                   ))}
                 </div>
-              )}
-            </section>
+              </div></section>
 
             {selectedPerson && (
               <PersonDetailModal
@@ -1278,7 +1439,7 @@
       const genderIcon = person.gender === "F" ? "♀" : "♂";
 
       return (
-        <div className="personCard" onClick={onClick} title="Открыть карточку">
+        <div className="personCard" data-person-anchor={person.id} onClick={onClick} title="Открыть карточку">
           {person.mainPhoto ? (
             <img className="avatar" src={person.mainPhoto} alt="Фото" />
           ) : (
@@ -1327,8 +1488,6 @@ function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, on
     if (window.ResizeObserver) {
       ro = new ResizeObserver(() => measure());
       ro.observe(rowRef.current);
-      // + запасной вариант: некоторые мобильные браузеры странно шлют ResizeObserver
-      window.addEventListener("resize", measure);
     } else {
       window.addEventListener("resize", measure);
     }
@@ -1336,7 +1495,7 @@ function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, on
     return () => {
       cancelAnimationFrame(raf);
       if (ro) ro.disconnect();
-      window.removeEventListener("resize", measure);
+      else window.removeEventListener("resize", measure);
     };
   }, [child?.id, partner?.id]);
 
@@ -1353,7 +1512,6 @@ function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, on
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
-          vectorEffect="non-scaling-stroke"
         />
       </svg>
 
