@@ -126,26 +126,7 @@
       height: 12px;
       background: #000000;
     }
-
-    /* Для пары ребенка - линия идет от сердечка */
-    .coupleRowChild {
-      display: inline-flex; 
-      align-items: center; 
-      gap: 16px; 
-      position: relative;
-      padding-bottom: 12px;
-    }
-
-    .coupleRowChild::after {
-      content: "";
-      position: absolute;
-      left: 19px; /* Центр сердечка (38px / 2) */
-      bottom: 0;
-      width: 2px;
-      height: 12px;
-      background: #000000;
-    }
-    /* Якорь: линия от родителей к карточке ребёнка (а не к сердечку) */
+/* Якорь: линия от родителей к карточке ребёнка (а не к сердечку) */
     .coupleRowAnchored{
       display: inline-flex;
       align-items: center;
@@ -1346,6 +1327,8 @@ function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, on
     if (window.ResizeObserver) {
       ro = new ResizeObserver(() => measure());
       ro.observe(rowRef.current);
+      // + запасной вариант: некоторые мобильные браузеры странно шлют ResizeObserver
+      window.addEventListener("resize", measure);
     } else {
       window.addEventListener("resize", measure);
     }
@@ -1353,7 +1336,7 @@ function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, on
     return () => {
       cancelAnimationFrame(raf);
       if (ro) ro.disconnect();
-      else window.removeEventListener("resize", measure);
+      window.removeEventListener("resize", measure);
     };
   }, [child?.id, partner?.id]);
 
@@ -1370,6 +1353,7 @@ function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, on
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
+          vectorEffect="non-scaling-stroke"
         />
       </svg>
 
