@@ -351,6 +351,9 @@
                 const yearB = b.birthDate ? new Date(b.birthDate).getFullYear() : 9999;
                 return yearA - yearB;
               });
+            }, [filteredPeople]);
+      
+            
 
       const matchesSearch = (person) => {
         const q = (searchQuery || "").toLowerCase().trim();
