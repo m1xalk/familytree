@@ -23,6 +23,10 @@
     .rootTree { padding-top: 0; margin-top: 0; }
 
     .tree { padding: 12px; overflow: auto; }
+    .treeWrap { position: relative; }
+    .treeOverlay { position:absolute; inset:0; pointer-events:none; }
+    .ghostLink { width: 1px; height: 1px; opacity: 0; }
+
     .tree ul { padding-top: 24px; position: relative; }
     .tree li {
       float: left;
@@ -311,6 +315,9 @@
       );
 
       const [expandedCouples, setExpandedCouples] = useState(new Set());
+      // Global render guard to avoid duplicate couple subtrees when branches converge
+      const renderedCouplesRef = React.useRef(new Set());
+
       const [allExpanded, setAllExpanded] = useState(true);
 
       const [viewMode, setViewMode] = useState("tree"); // "tree" или "list"
@@ -578,6 +585,90 @@
         );
         return roots.length ? roots : couples;
       }, [couples, personIsChild, rootCoupleIds]);
+
+      // Reset "already rendered couples" on any re-render of the tree inputs
+      useEffect(() => {
+        renderedCouplesRef.current = new Set();
+      }, [couples, rootCoupleIds, expandedCouples, allExpanded, searchQuery]);
+
+      // Draw extra connectors for merged couples (when a couple appears under multiple parents)
+      useEffect(() => {
+        const svg = document.getElementById("overlaySvg");
+        if (!svg) return;
+
+        const wrap = svg.parentElement;
+        if (!wrap) return;
+
+        const getBox = () => wrap.getBoundingClientRect();
+
+        const clear = () => { while (svg.firstChild) svg.removeChild(svg.firstChild); };
+
+        const draw = () => {
+          clear();
+
+          const wrapBox = getBox();
+          // Ghost points: where the duplicate would have been in the second branch
+          const ghosts = wrap.querySelectorAll("[data-link-couple-id]");
+          ghosts.forEach((ghostEl) => {
+            const targetId = ghostEl.getAttribute("data-link-couple-id");
+            if (!targetId) return;
+
+            const target = wrap.querySelector(`[data-couple-id="${targetId}"] .coupleRow, [data-couple-id="${targetId}"] .coupleRowAnchored`);
+            if (!target) return;
+
+            const g = ghostEl.getBoundingClientRect();
+            const t = target.getBoundingClientRect();
+
+            const gx = (g.left + g.width / 2) - wrapBox.left;
+            const gy = (g.top + g.height / 2) - wrapBox.top;
+
+            // Connect to top-center of the real couple row (slightly above)
+            const tx = (t.left + t.width / 2) - wrapBox.left;
+            const ty = (t.top) - wrapBox.top;
+
+            const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            const midY = gy + Math.max(20, Math.min(80, (ty - gy) / 2));
+            const d = `M ${gx} ${gy} V ${midY} H ${tx} V ${ty}`;
+            path.setAttribute("d", d);
+            path.setAttribute("fill", "none");
+            path.setAttribute("stroke", "#000000");
+            path.setAttribute("stroke-width", "2");
+            path.setAttribute("stroke-linecap", "round");
+            path.setAttribute("stroke-linejoin", "round");
+            svg.appendChild(path);
+          });
+
+          // Resize svg viewbox
+          svg.setAttribute("width", String(wrapBox.width));
+          svg.setAttribute("height", String(wrapBox.height));
+          svg.setAttribute("viewBox", `0 0 ${wrapBox.width} ${wrapBox.height}`);
+        };
+
+        const rafDraw = () => requestAnimationFrame(draw);
+
+        // Initial draw
+        rafDraw();
+
+        let ro = null;
+        if (window.ResizeObserver) {
+          ro = new ResizeObserver(() => rafDraw());
+          ro.observe(wrap);
+        } else {
+          window.addEventListener("resize", rafDraw);
+        }
+
+        // Also redraw on scroll inside tree container
+        const tree = wrap.querySelector(".tree");
+        const onScroll = () => rafDraw();
+        if (tree) tree.addEventListener("scroll", onScroll, { passive: true });
+
+        return () => {
+          clear();
+          if (ro) ro.disconnect();
+          else window.removeEventListener("resize", rafDraw);
+          if (tree) tree.removeEventListener("scroll", onScroll);
+        };
+      }, [couples, rootCoupleIds, expandedCouples, allExpanded, searchQuery]);
 
       const couplesByPerson = useMemo(() => {
         const map = new Map();
@@ -879,6 +970,7 @@
                 <div className="p-8 text-center text-slate-600">
                   Пока пусто. {isAdmin && "Добавь людей и пары."}
                 </div>
+                </div>
               ) : viewMode === "list" ? (
                 <div className="space-y-2">
                   {sortedPeopleByAge.length === 0 ? (
@@ -917,6 +1009,8 @@
                   Есть люди, но нет пар. {isAdmin && "Добавь пару, чтобы построить дерево."}
                 </div>
               ) : (
+                <div className="treeWrap">
+                <svg className="treeOverlay" id="overlaySvg"></svg>
                 <div className="tree space-y-10">
                   {rootCouples.map(c => (
                     <ul key={c.id} className="clearfix rootTree">
@@ -935,6 +1029,7 @@
                         depth={0}
                         path={new Set()}
                         searchQuery={searchQuery}
+                        renderedCouplesRef={renderedCouplesRef}
                       />
                     </ul>
                   ))}
@@ -1073,7 +1168,8 @@
       toggleCoupleExpanded,
       onSelectPerson, isAdmin, onOpenAddChild,
       onDeleteCouple, onDetachChild,
-      depth, path, searchQuery = ""
+      depth, path, searchQuery = "",
+      renderedCouplesRef
     }) {
       return (
         <li>
@@ -1092,6 +1188,7 @@
             depth={depth}
             path={path}
             searchQuery={searchQuery}
+            renderedCouplesRef={renderedCouplesRef}
           />
         </li>
       );
@@ -1105,10 +1202,31 @@
       onDeleteCouple, onDetachChild,
       depth, path,
       focusPersonId = null,
-      searchQuery = ""
+      searchQuery = "",
+      renderedCouplesRef
     }) {
       const p1 = people.find(p => p.id === couple.partner1Id) || null;
       const p2 = people.find(p => p.id === couple.partner2Id) || null;
+
+            // Avoid duplicate rendering of the same couple subtree (DAG -> tree)
+      // If this couple was already rendered elsewhere, we keep a hidden "ghost" node here
+      // and draw an extra SVG connector from this ghost position to the real couple.
+      if (renderedCouplesRef?.current) {
+        const already = renderedCouplesRef.current.has(couple.id);
+        if (already && depth > 0) {
+          return (
+            <div className="coupleContainer" data-couple-id={couple.id}>
+              <div className="coupleRow">
+                <div className="ghostLink" data-link-couple-id={couple.id} />
+              </div>
+            </div>
+          );
+        }
+        renderedCouplesRef.current.add(couple.id);
+      }
+
+        if (!already) renderedCouplesRef.current.add(couple.id);
+      }
 
       const statusIcon = couple.status === "divorced" ? "💔" : "❤️";
 
@@ -1241,7 +1359,8 @@
       toggleCoupleExpanded,
       onSelectPerson, isAdmin,
       onOpenAddChild, onDeleteCouple, onDetachChild,
-      depth, path, searchQuery = ""
+      depth, path, searchQuery = "",
+      renderedCouplesRef
     }) {
       const personCouples = (couplesByPerson.get(person.id) || []);
 
@@ -1271,6 +1390,7 @@
                     path={new Set([...path, person.id])}
                     focusPersonId={person.id}
                     searchQuery={searchQuery}
+                    renderedCouplesRef={renderedCouplesRef}
                   />
                 </li>
               ))}
