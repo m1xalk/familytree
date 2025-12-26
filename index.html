@@ -20,6 +20,8 @@
 
   <style>
     /* Дерево */
+    .rootTree { padding-top: 0; margin-top: 0; }
+
     .tree { padding: 12px; overflow: auto; }
     .tree ul { padding-top: 24px; position: relative; }
     .tree li {
@@ -297,6 +299,11 @@
       const [couples, setCouples] = useState([]);
       const [comments, setComments] = useState([]);
 
+      // Root couples selection (to avoid connecting unrelated top nodes)
+      const [rootCoupleIds, setRootCoupleIds] = useState([]);
+      const [showRootsModal, setShowRootsModal] = useState(false);
+      const [rootsDraft, setRootsDraft] = useState([]);
+
       const [selectedPersonId, setSelectedPersonId] = useState(null);
       const selectedPerson = useMemo(
         () => people.find(p => p.id === selectedPersonId) || null,
@@ -343,7 +350,12 @@
           setComments(data);
         });
 
-        setUnsubs([u1, u2, u3]);
+        const u4 = db.collection("settings").doc("tree").onSnapshot((doc) => {
+          const d = doc.exists ? doc.data() : null;
+          setRootCoupleIds(Array.isArray(d?.rootCoupleIds) ? d.rootCoupleIds : []);
+        });
+
+        setUnsubs([u1, u2, u3, u4]);
       };
 
       const refreshAdminFlag = async (u) => {
@@ -373,6 +385,7 @@
           setPeople([]);
           setCouples([]);
           setComments([]);
+          setRootCoupleIds([]);
           setLoading(false);
         });
 
@@ -552,12 +565,19 @@
         return s;
       }, [couples]);
 
-      const rootCouples = useMemo(() => {
+            const rootCouples = useMemo(() => {
+        // If admin selected explicit roots, use them; otherwise fallback to heuristic.
+        if (Array.isArray(rootCoupleIds) && rootCoupleIds.length) {
+          const setIds = new Set(rootCoupleIds);
+          const chosen = couples.filter(c => setIds.has(c.id));
+          return chosen.length ? chosen : couples;
+        }
+
         const roots = couples.filter(c =>
           !personIsChild.has(c.partner1Id) && !personIsChild.has(c.partner2Id)
         );
         return roots.length ? roots : couples;
-      }, [couples, personIsChild]);
+      }, [couples, personIsChild, rootCoupleIds]);
 
       const couplesByPerson = useMemo(() => {
         const map = new Map();
@@ -824,12 +844,23 @@
                   </button>
 
                   {viewMode === "tree" && (
-                    <button
-                      onClick={toggleAllExpanded}
+                    <>
+                      {isAdmin && (
+                        <button
+                          onClick={() => { setRootsDraft(rootCoupleIds || []); setShowRootsModal(true); }}
+                          className="px-3 py-1 rounded-lg bg-amber-100 text-amber-800 hover:bg-amber-200 text-xs font-medium transition-all"
+                          title="Выбрать корневые пары (чтобы сверху не связывались неродственные ветки)"
+                        >
+                          ⚓ Корни
+                        </button>
+                      )}
+                      <button
+                        onClick={toggleAllExpanded}
                       className="px-3 py-1 rounded-lg bg-purple-100 text-purple-700 hover:bg-purple-200 text-xs font-medium transition-all"
                     >
                       {allExpanded ? "➖ Свернуть всё" : "➕ Развернуть всё"}
                     </button>
+                    </>
                   )}
                 </div>
               </div>
@@ -886,11 +917,10 @@
                   Есть люди, но нет пар. {isAdmin && "Добавь пару, чтобы построить дерево."}
                 </div>
               ) : (
-                <div className="tree">
-                  <ul className="clearfix">
-                    {rootCouples.map(c => (
+                <div className="tree space-y-10">
+                  {rootCouples.map(c => (
+                    <ul key={c.id} className="clearfix rootTree">
                       <TreeCoupleNode
-                        key={c.id}
                         couple={c}
                         people={people}
                         couples={couples}
@@ -906,8 +936,8 @@
                         path={new Set()}
                         searchQuery={searchQuery}
                       />
-                    ))}
-                  </ul>
+                    </ul>
+                  ))}
                 </div>
               )}
             </section>
@@ -976,6 +1006,25 @@
               people={people}
               onClose={() => setShowCoupleForm(false)}
               onSave={(data) => addCouple(data)}
+            />
+          )}
+
+          {showRootsModal && isAdmin && (
+            <RootsModal
+              people={people}
+              couples={couples}
+              draft={rootsDraft}
+              setDraft={setRootsDraft}
+              onClose={() => setShowRootsModal(false)}
+              onSave={async () => {
+                try {
+                  const cleaned = Array.from(new Set((rootsDraft || []).filter(Boolean)));
+                  await db.collection("settings").doc("tree").set({ rootCoupleIds: cleaned }, { merge: true });
+                  setShowRootsModal(false);
+                } catch (e) {
+                  alert("Не удалось сохранить корни: " + (e?.message || e));
+                }
+              }}
             />
           )}
 
@@ -1194,14 +1243,6 @@
       onOpenAddChild, onDeleteCouple, onDetachChild,
       depth, path, searchQuery = ""
     }) {
-      // ⛔ Не дублируем одного и того же человека в одной ветке дерева
-      if (path && path.has(person.id)) {
-        return null;
-      }
-
-      const nextPath = new Set(path || []);
-      nextPath.add(person.id);
-
       const personCouples = (couplesByPerson.get(person.id) || []);
 
       return (
@@ -1227,7 +1268,7 @@
                     onDeleteCouple={onDeleteCouple}
                     onDetachChild={onDetachChild}
                     depth={depth + 1}
-                    path={nextPath}
+                    path={new Set([...path, person.id])}
                     focusPersonId={person.id}
                     searchQuery={searchQuery}
                   />
@@ -1808,7 +1849,74 @@ function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, on
       );
     }
 
-    // render
+
+    function RootsModal({ people, couples, draft, setDraft, onClose, onSave }) {
+      const nameOf = (id) => {
+        const p = people.find(x => x.id === id);
+        return p ? safeName(p) : "—";
+      };
+
+      const toggle = (coupleId) => {
+        setDraft(prev => {
+          const s = new Set(prev || []);
+          s.has(coupleId) ? s.delete(coupleId) : s.add(coupleId);
+          return Array.from(s);
+        });
+      };
+
+      return (
+        <Modal onClose={onClose}>
+          <div className="text-lg font-semibold mb-2">Корневые пары</div>
+          <div className="text-sm text-slate-600 mb-4">
+            Выбери пары, с которых начинается дерево. Это убирает «связи» между неродственными верхними ветками.
+          </div>
+
+          <div className="space-y-2 max-h-[55vh] overflow-y-auto pr-1">
+            {couples.length === 0 ? (
+              <div className="text-slate-600">Пока нет пар.</div>
+            ) : (
+              couples.map(c => {
+                const checked = (draft || []).includes(c.id);
+                return (
+                  <label key={c.id} className="flex items-start gap-3 p-3 border rounded-xl hover:bg-slate-50 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="mt-1"
+                      checked={checked}
+                      onChange={() => toggle(c.id)}
+                    />
+                    <div className="min-w-0">
+                      <div className="font-semibold text-slate-900">
+                        {nameOf(c.partner1Id)} {c.status === "divorced" ? "💔" : "❤️"} {nameOf(c.partner2Id)}
+                      </div>
+                      <div className="text-xs text-slate-600">
+                        Дети: {(c.childrenIds || []).length}
+                      </div>
+                    </div>
+                  </label>
+                );
+              })
+            )}
+          </div>
+
+          <div className="mt-4 flex gap-2">
+            <button onClick={onSave} className="flex-1 px-3 py-2 rounded-xl bg-amber-600 text-white hover:bg-amber-700">
+              Сохранить корни
+            </button>
+            <button onClick={onClose} className="flex-1 px-3 py-2 rounded-xl bg-slate-200 text-slate-800 hover:bg-slate-300">
+              Отмена
+            </button>
+          </div>
+
+          <div className="text-xs text-slate-500 mt-3">
+            Если ничего не выбрать, будет использован текущий автоматический алгоритм.
+          </div>
+        </Modal>
+      );
+    }
+
+
+        // render
     const root = ReactDOM.createRoot(document.getElementById("root"));
     root.render(<App />);
   </script>
