@@ -1194,6 +1194,14 @@
       onOpenAddChild, onDeleteCouple, onDetachChild,
       depth, path, searchQuery = ""
     }) {
+      // ⛔ Не дублируем одного и того же человека в одной ветке дерева
+      if (path && path.has(person.id)) {
+        return null;
+      }
+
+      const nextPath = new Set(path || []);
+      nextPath.add(person.id);
+
       const personCouples = (couplesByPerson.get(person.id) || []);
 
       return (
@@ -1219,7 +1227,7 @@
                     onDeleteCouple={onDeleteCouple}
                     onDetachChild={onDetachChild}
                     depth={depth + 1}
-                    path={new Set([...path, person.id])}
+                    path={nextPath}
                     focusPersonId={person.id}
                     searchQuery={searchQuery}
                   />
