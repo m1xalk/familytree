@@ -854,7 +854,25 @@
           rows[lvl].singles.push(p);
         }
 
-        return { rows, personLevel, coupleLevel, allowedCoupleIds, allowedPersonIds };
+        // Calculate descendant count for each couple (for intelligent spacing)
+        const descendantCount = {};
+        const calcDescendants = (coupleId) => {
+          if (descendantCount[coupleId] !== undefined) return descendantCount[coupleId];
+          const c = byId.get(coupleId);
+          if (!c) return 0;
+          let count = (c.childrenIds || []).length;
+          for (const ch of (c.childrenIds || [])) {
+            const childCouples = couplesByPerson.get(ch) || [];
+            for (const cc of childCouples) count += calcDescendants(cc.id);
+          }
+          descendantCount[coupleId] = count;
+          return count;
+        };
+        for (const c of couples) {
+          if (allowedCoupleIds.has(c.id)) calcDescendants(c.id);
+        }
+
+        return { rows, personLevel, coupleLevel, allowedCoupleIds, allowedPersonIds, descendantCount };
       }, [people, couples, rootCouples, couplesByPerson, expandedCouples]);
 
       // coords for SVG links
@@ -1155,34 +1173,54 @@
               ) : (
                 <div ref={treeWrapRef} className="tree py-8">
                 <svg className="treeLinksSvg">
-                  {couples.map(c => (c.childrenIds || []).map(childId => {
+                  {couples.map(c => {
                     if (!graphLevels.allowedCoupleIds?.has(c.id)) return null;
-                    if (!graphLevels.allowedPersonIds?.has(childId)) return null;
-                    const start = linkCoords["c-" + c.id];
-                    const end = linkCoords["p-" + childId];
-                    if (!start || !end) return null;
-                    const midY = (start.y + end.y) / 2;
-                    return (
-                      <path
-                        key={c.id + "-" + childId}
-                        d={`M ${start.x} ${start.y} C ${start.x} ${midY}, ${end.x} ${midY}, ${end.x} ${end.y}`}
-                        stroke="#000000"
-                        strokeWidth="2"
-                        fill="none"
-                        className="path-transition"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        vectorEffect="non-scaling-stroke"
-                      />
-                    );
-                  }))}
+                    const kids = (c.childrenIds || []).filter(ch => graphLevels.allowedPersonIds?.has(ch));
+                    return kids.map((childId, kidx) => {
+                      const start = linkCoords["c-" + c.id];
+                      const end = linkCoords["p-" + childId];
+                      if (!start || !end) return null;
+
+                      const dx = end.x - start.x;
+                      const absDx = Math.abs(dx);
+
+                      // bow: how much the curve "goes around" (bigger when far or when many siblings)
+                      const baseBow = Math.min(220, Math.max(70, absDx * 0.35));
+                      const siblingSpread = (kidx - (kids.length - 1) / 2) * 22; // fan-out to reduce overlaps
+                      const bowDir = dx >= 0 ? 1 : -1;
+
+                      const c1x = start.x + bowDir * baseBow + siblingSpread;
+                      const c2x = end.x - bowDir * baseBow + siblingSpread;
+
+                      // keep some vertical easing near endpoints
+                      const c1y = start.y + 14;
+                      const c2y = end.y - 14;
+
+                      return (
+                        <path
+                          key={c.id + "-" + childId}
+                          d={`M ${start.x} ${start.y}
+                              C ${c1x} ${c1y},
+                                ${c2x} ${c2y},
+                                ${end.x} ${end.y}`}
+                          stroke="#000000"
+                          strokeWidth="2"
+                          fill="none"
+                          className="path-transition"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          vectorEffect="non-scaling-stroke"
+                        />
+                      );
+                    });
+                  })}
                 </svg>
 
                 <div className="w-full flex flex-col items-center gap-20">
                   {graphLevels.rows.map((row, idx) => (
                     <div key={idx} className="flex flex-wrap gap-16 justify-center items-start px-6">
                       {row.couples.map(cp => (
-                        <div key={cp.id} className="coupleContainer" data-couple-anchor={cp.id}>
+                        <div key={cp.id} className="coupleContainer" data-couple-anchor={cp.id} style={{ marginLeft: Math.min(90, (graphLevels.descendantCount?.[cp.id] || 0) * 4), marginRight: Math.min(90, (graphLevels.descendantCount?.[cp.id] || 0) * 4) }}>
                           <div className="coupleRow">
                             {(() => { const p1 = people.find(p => p.id === cp.partner1Id) || null; return (
                               <div style={{ opacity: matchesSearch(p1) ? 1 : 0.25 }}>
@@ -2022,7 +2060,7 @@ function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, on
               )}
             </div>
 
-                        <div className="flex justify-center -mt-40 mb-6">
+                        <div className="flex justify-center -mt-6 mb-6">
               {person.mainPhoto ? (
                 <img
                   src={person.mainPhoto}
