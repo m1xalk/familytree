@@ -807,49 +807,6 @@
           rows[lvl].singles.push(p);
         }
 
-        
-        // ---- Reorder rows to reduce line crossings (barycenter heuristic) ----
-        const rowCount = rows.length;
-
-        // helper: get persons displayed in a level in current order (partners first, then singles)
-        const levelPersons = (lvl) => {
-          const list = [];
-          (rows[lvl]?.couples || []).forEach(c => { list.push(c.partner1Id, c.partner2Id); });
-          (rows[lvl]?.singles || []).forEach(p => list.push(p.id));
-          return list;
-        };
-
-        // initial person order per level
-        const personPos = Array.from({ length: rowCount }, () => new Map());
-        for (let lvl = 0; lvl < rowCount; lvl++) {
-          const ids = levelPersons(lvl);
-          ids.forEach((id, i) => personPos[lvl].set(id, i));
-        }
-
-        // a few passes top-down
-        for (let pass = 0; pass < 3; pass++) {
-          for (let lvl = 0; lvl < rowCount - 1; lvl++) {
-            const nextPos = personPos[lvl + 1];
-
-            const scoreCouple = (c) => {
-              const kids = (c.childrenIds || []).filter(id => nextPos.has(id));
-              if (!kids.length) return Number.POSITIVE_INFINITY;
-              let sum = 0;
-              kids.forEach(k => { sum += nextPos.get(k); });
-              return sum / kids.length;
-            };
-
-            // sort couples by average position of their children in next row
-            rows[lvl].couples.sort((a, b) => scoreCouple(a) - scoreCouple(b));
-
-            // refresh person positions for this level after sorting
-            const ids = levelPersons(lvl);
-            personPos[lvl] = new Map();
-            ids.forEach((id, i) => personPos[lvl].set(id, i));
-          }
-        }
-        // ---- end reorder ----
-
         return { rows, personLevel, coupleLevel, allowedCoupleIds, allowedPersonIds };
       }, [people, couples, rootCouples, couplesByPerson, expandedCouples]);
 
@@ -1178,7 +1135,7 @@
 
                 <div className="w-full flex flex-col items-center gap-20 min-w-max">
                   {graphLevels.rows.map((row, idx) => (
-                    <div key={idx} className="flex flex-wrap gap-20 justify-center items-start px-10">
+                    <div key={idx} className="flex flex-wrap gap-14 justify-center items-start px-10">
                       {row.couples.map(cp => (
                         <div key={cp.id} className="coupleContainer" data-couple-anchor={cp.id}>
                           <div className="coupleRow">
