@@ -352,7 +352,6 @@
                 return yearA - yearB;
               });
 
-
       const matchesSearch = (person) => {
         const q = (searchQuery || "").toLowerCase().trim();
         if (!q) return true;
@@ -1091,7 +1090,11 @@
                       {row.couples.map(cp => (
                         <div key={cp.id} className="coupleContainer" data-couple-anchor={cp.id}>
                           <div className="coupleRow">
-                            <div style={{ opacity: matchesSearch(people.find(p => p.id === cp.partner1Id)) ? 1 : 0.25 }}><PersonCardMini person={people.find(p => p.id === cp.partner1Id) || null} onClick={() => setSelectedPersonId(cp.partner1Id)} /></div>
+                            {(() => { const p1 = people.find(p => p.id === cp.partner1Id) || null; return (
+                              <div style={{ opacity: matchesSearch(p1) ? 1 : 0.25 }}>
+                                <PersonCardMini person={p1} onClick={() => setSelectedPersonId(cp.partner1Id)} />
+                              </div>
+                            ); })()}
                             <div
                               className="coupleMid"
                               title={isAdmin ? "Добавить ребёнка" : "Только админ может менять дерево"}
@@ -1100,7 +1103,11 @@
                             >
                               {cp.status === "divorced" ? "💔" : "❤️"}
                             </div>
-                            <div style={{ opacity: matchesSearch(people.find(p => p.id === cp.partner2Id)) ? 1 : 0.25 }}><PersonCardMini person={people.find(p => p.id === cp.partner2Id) || null} onClick={() => setSelectedPersonId(cp.partner2Id)} /></div>
+                            {(() => { const p2 = people.find(p => p.id === cp.partner2Id) || null; return (
+                              <div style={{ opacity: matchesSearch(p2) ? 1 : 0.25 }}>
+                                <PersonCardMini person={p2} onClick={() => setSelectedPersonId(cp.partner2Id)} />
+                              </div>
+                            ); })()}
                           </div>
 
                           <div className="mt-2 flex items-center justify-center gap-2">
@@ -1128,7 +1135,11 @@
                       ))}
 
                       {row.singles.map(p => (
-                        <div key={p.id} className="mt-2" data-person-anchor={p.id} style={{ opacity: matchesSearch(p) ? 1 : 0.25 }}><PersonCardMini person={p} onClick={() => setSelectedPersonId(p.id)} /></div>
+                        <div key={p.id} className="mt-2" data-person-anchor={p.id}>
+                          <div style={{ opacity: matchesSearch(p) ? 1 : 0.25 }}>
+                            <PersonCardMini person={p} onClick={() => setSelectedPersonId(p.id)} />
+                          </div>
+                        </div>
                       ))}
                     </div>
                   ))}
