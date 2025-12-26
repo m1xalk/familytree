@@ -1005,7 +1005,7 @@
                 <div>
                   <div className="text-3xl font-extrabold text-slate-900">Родословное дерево</div>
                   <div className="text-lg text-slate-600">
-                    {isAdmin ? "Администратор" : "Гость"} 
+                    {isAdmin ? "Администратор" : "Гость"} • Cloud Firestore
                   </div>
                 </div>
               </div>
@@ -2040,11 +2040,7 @@ function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, on
                 </div>
               )}
             </div>
-                title="Открыть на весь экран"
-              />
-            )}
-
-            <div className="space-y-6 max-h-[72vh] overflow-y-auto pr-1">
+<div className="space-y-6 max-h-[72vh] overflow-y-auto pr-1">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 {person.birthDate && (
                   <div className="text-base bg-slate-50 border rounded-3xl p-5">
