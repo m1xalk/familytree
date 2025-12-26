@@ -658,7 +658,7 @@
               </div>
 
               <div className="mt-4 text-xs text-slate-500">
-                Гость — анонимный вход Firebase. Логина/пароль от пользователя не требуется.
+                Гость — анонимный вход Firebase. Логина/пароля от пользователя не требуется.
               </div>
             </div>
 
@@ -970,39 +970,39 @@
       if (p1?.id) nextPath.add(p1.id);
       if (p2?.id) nextPath.add(p2.id);
 
-      // Если это пара ребёнка (focusPersonId задан), хотим чтобы линия шла к ребёнку, а не к сердечку.
-const isChildCouple = focusPersonId && (p1?.id === focusPersonId || p2?.id === focusPersonId);
+      // Если это пара ребёнка (focusPersonId задан), используем якорную структуру
+      const isChildCouple = focusPersonId && (p1?.id === focusPersonId || p2?.id === focusPersonId);
 
-return (
-  <>
-    <div className="coupleContainer">
-      {isChildCouple ? (
-        <AnchoredCoupleRow
-          child={p1?.id === focusPersonId ? p1 : p2}
-          partner={p1?.id === focusPersonId ? p2 : p1}
-          statusIcon={statusIcon}
-          isAdmin={isAdmin}
-          onAddChild={() => isAdmin && onOpenAddChild(couple.id)}
-          onSelect={(id) => id && onSelectPerson(id)}
-        />
-      ) : (
-        <div className="coupleRow">
-          <PersonCardMini person={p1} onClick={() => p1 && onSelectPerson(p1.id)} />
+      return (
+        <>
+          <div className="coupleContainer">
+            {isChildCouple ? (
+              <AnchoredCoupleRow
+                child={p1?.id === focusPersonId ? p1 : p2}
+                partner={p1?.id === focusPersonId ? p2 : p1}
+                statusIcon={statusIcon}
+                isAdmin={isAdmin}
+                onAddChild={() => isAdmin && onOpenAddChild(couple.id)}
+                onSelect={(id) => id && onSelectPerson(id)}
+              />
+            ) : (
+              <div className="coupleRow">
+                <PersonCardMini person={p1} onClick={() => p1 && onSelectPerson(p1.id)} />
 
-          <div
-            className="coupleMid"
-            title={isAdmin ? "Добавить ребёнка" : "Только админ может менять дерево"}
-            aria-disabled={!isAdmin}
-            onClick={() => isAdmin && onOpenAddChild(couple.id)}
-          >
-            {statusIcon}
-          </div>
+                <div
+                  className="coupleMid"
+                  title={isAdmin ? "Добавить ребёнка" : "Только админ может менять дерево"}
+                  aria-disabled={!isAdmin}
+                  onClick={() => isAdmin && onOpenAddChild(couple.id)}
+                >
+                  {statusIcon}
+                </div>
 
-          <PersonCardMini person={p2} onClick={() => p2 && onSelectPerson(p2.id)} />
-        </div>
-      )}
+                <PersonCardMini person={p2} onClick={() => p2 && onSelectPerson(p2.id)} />
+              </div>
+            )}
 
-      <div className="mt-2 flex items-center justify-center gap-2">
+            <div className="mt-2 flex items-center justify-center gap-2">
               {children.length > 0 && (
                 <button
                   className="text-xs px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700"
@@ -1084,7 +1084,7 @@ return (
                     onDetachChild={onDetachChild}
                     depth={depth + 1}
                     path={new Set([...path, person.id])}
-                    focusPersonId={null}
+                    focusPersonId={person.id}
                   />
                 </li>
               ))}
@@ -1205,7 +1205,7 @@ function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, on
   );
 }
 
-// =========================
+    // =========================
     // Modals + Forms
     // =========================
     function Modal({ children, onClose }) {
