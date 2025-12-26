@@ -382,6 +382,36 @@
       };
       const closeAddChild = () => setAddChildModal({ open: false, coupleId: null });
 
+      // Из исходного документа: создание ребёнка и привязка к паре
+      const createChildAndAttach = async (coupleId, childData) => {
+        if (!isAdmin) return;
+
+        const childId = uid();
+        const child = normalizePerson(childData);
+
+        await db.collection("people").doc(childId).set(child);
+
+        const couple = couples.find(c => c.id === coupleId);
+        const nextChildren = [...new Set([...(couple?.childrenIds || []), childId])];
+
+        await updateCouple(coupleId, { childrenIds: nextChildren });
+
+        setExpandedCouples(prev => new Set([...prev, coupleId]));
+        closeAddChild();
+      };
+
+      const attachExistingChild = async (coupleId, childId) => {
+        if (!isAdmin) return;
+
+        const couple = couples.find(c => c.id === coupleId);
+        const nextChildren = [...new Set([...(couple?.childrenIds || []), childId])];
+
+        await updateCouple(coupleId, { childrenIds: nextChildren });
+        setExpandedCouples(prev => new Set([...prev, coupleId]));
+        closeAddChild();
+      };
+
+
 
       const [newComment, setNewComment] = useState("");
 
