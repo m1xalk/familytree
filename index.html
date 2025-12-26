@@ -37,14 +37,14 @@
       position: absolute;
       top: 0;
       right: 50%;
-      border-top: 2px solid #cbd5e1;
+      border-top: 2px solid #000000;
       width: 50%;
       height: 24px;
     }
     .tree li::after {
       right: auto;
       left: 50%;
-      border-left: 2px solid #cbd5e1;
+      border-left: 2px solid #000000;
     }
 
     .tree li:only-child::before,
@@ -53,7 +53,7 @@
 
     .tree li:first-child::before { border: 0 none; }
     .tree li:last-child::after { border: 0 none; }
-    .tree li:last-child::before { border-right: 2px solid #cbd5e1; border-radius: 0 10px 0 0; }
+    .tree li:last-child::before { border-right: 2px solid #000000; border-radius: 0 10px 0 0; }
     .tree li:first-child::after { border-radius: 10px 0 0 0; }
 
     .tree ul ul::before {
@@ -61,7 +61,7 @@
       position: absolute;
       top: 0;
       left: 50%;
-      border-left: 2px solid #cbd5e1;
+      border-left: 2px solid #000000;
       width: 0;
       height: 24px;
     }
@@ -122,7 +122,7 @@
       transform: translateX(-50%);
       width: 2px;
       height: 12px;
-      background: #cbd5e1;
+      background: #000000;
     }
 
     /* Для пары ребенка - линия идет от сердечка */
@@ -141,7 +141,7 @@
       bottom: 0;
       width: 2px;
       height: 12px;
-      background: #cbd5e1;
+      background: #000000;
     }
     /* Якорь: линия от родителей к карточке ребёнка (а не к сердечку) */
     .coupleRowAnchored{
@@ -1180,7 +1180,7 @@ function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, on
         <path
           d={`M ${fromX} 0 V ${h/2} H ${geom.toX} V ${h}`}
           fill="none"
-          stroke="#cbd5e1"
+          stroke="#000000"
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
