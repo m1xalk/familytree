@@ -320,6 +320,7 @@
       const [loading, setLoading] = useState(true);
       const [isAdmin, setIsAdmin] = useState(false);
 
+
       const [showLogin, setShowLogin] = useState(false);
       const [email, setEmail] = useState("");
       const [password, setPassword] = useState("");
@@ -332,6 +333,9 @@
       const [rootCoupleIds, setRootCoupleIds] = useState([]);
       const [showRootsModal, setShowRootsModal] = useState(false);
       const [rootsDraft, setRootsDraft] = useState([]);
+      const [guestRootCoupleIds, setGuestRootCoupleIds] = useState(null);
+
+      const effectiveRootCoupleIds = isAdmin ? rootCoupleIds : (guestRootCoupleIds ?? rootCoupleIds);
 
       const [selectedPersonId, setSelectedPersonId] = useState(null);
       const selectedPerson = useMemo(
@@ -681,8 +685,8 @@
 
       const rootCouples = useMemo(() => {
         // If admin selected explicit roots, use them; otherwise fallback to heuristic.
-        if (Array.isArray(rootCoupleIds) && rootCoupleIds.length) {
-          const setIds = new Set(rootCoupleIds);
+        if (Array.isArray(effectiveRootCoupleIds) && effectiveRootCoupleIds.length) {
+          const setIds = new Set(effectiveRootCoupleIds);
           const chosen = couples.filter(c => setIds.has(c.id));
           return chosen.length ? chosen : couples;
         }
@@ -690,7 +694,7 @@
           !personIsChild.has(c.partner1Id) && !personIsChild.has(c.partner2Id)
         );
         return roots.length ? roots : couples;
-      }, [couples, personIsChild, rootCoupleIds]);
+      }, [couples, personIsChild, effectiveRootCoupleIds]);
 
       const couplesByPerson = useMemo(() => {
         const map = new Map();
@@ -921,43 +925,43 @@
       if (!user) {
         return (
           <div className="min-h-screen flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl p-8 w-full max-w-sm shadow-2xl">
+            <div className="bg-white rounded-3xl p-12 w-full max-w-xl shadow-2xl">
               <div className="text-center mb-6">
-                <div className="w-16 h-16 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-2xl mx-auto mb-4 flex items-center justify-center text-white text-2xl font-bold shadow-lg">
+                <div className="w-24 h-24 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-3xl mx-auto mb-6 flex items-center justify-center text-white text-4xl font-extrabold shadow-lg">
                   FT
                 </div>
-                <div className="text-4xl font-extrabold text-slate-900">Родословное дерево</div>
-                <div className="text-sm text-slate-500 mt-2">Войти как админ или как гость</div>
+                <div className="text-6xl font-extrabold text-slate-900">Родословное дерево</div>
+                <div className="text-lg text-slate-500 mt-3">Войти как админ или как гость</div>
               </div>
 
               <div className="space-y-3">
                 <button
                   onClick={() => setShowLogin(true)}
-                  className="w-full px-4 py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:from-indigo-700 hover:to-purple-700 font-semibold shadow-lg transition-all"
+                  className="w-full px-6 py-5 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:from-indigo-700 hover:to-purple-700 font-extrabold shadow-lg transition-all text-xl"
                 >
                   🔐 Вход администратора
                 </button>
 
                 <button
                   onClick={handleGuestLogin}
-                  className="w-full px-4 py-3 rounded-xl bg-slate-200 text-slate-800 hover:bg-slate-300 font-semibold transition-all"
+                  className="w-full px-6 py-5 rounded-2xl bg-slate-200 text-slate-800 hover:bg-slate-300 font-extrabold transition-all text-xl"
                 >
                   👁️ Войти как гость
                 </button>
               </div>
 
-              <div className="mt-4 text-sm text-slate-600">
+              <div className="mt-6 text-base text-slate-600">
                 Гость — анонимный вход Firebase. Логина/пароля от пользователя не требуется.
               </div>
             </div>
 
             {showLogin && (
               <Modal onClose={() => setShowLogin(false)}>
-                <div className="text-lg font-semibold mb-4">Вход администратора</div>
+                <div className="text-3xl font-extrabold mb-6">Вход администратора</div>
                 <div className="space-y-3">
                   <Field label="Email">
                     <input
-                      className="w-full border rounded-xl px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      className="w-full border rounded-2xl px-5 py-4 focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-xl"
                       type="email"
                       placeholder="admin@example.com"
                       value={email}
@@ -966,7 +970,7 @@
                   </Field>
                   <Field label="Пароль">
                     <input
-                      className="w-full border rounded-xl px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      className="w-full border rounded-2xl px-5 py-4 focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-xl"
                       type="password"
                       placeholder="Пароль"
                       value={password}
@@ -977,10 +981,10 @@
                 </div>
 
                 <div className="mt-4 flex gap-2">
-                  <button onClick={handleAdminLogin} className="flex-1 px-3 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 transition-all">
+                  <button onClick={handleAdminLogin} className="flex-1 px-5 py-4 rounded-2xl bg-indigo-600 text-white hover:bg-indigo-700 transition-all text-xl font-extrabold">
                     Войти
                   </button>
-                  <button onClick={() => setShowLogin(false)} className="flex-1 px-3 py-2 rounded-xl bg-slate-200 text-slate-800 hover:bg-slate-300 transition-all">
+                  <button onClick={() => setShowLogin(false)} className="flex-1 px-5 py-4 rounded-2xl bg-slate-200 text-slate-800 hover:bg-slate-300 transition-all text-xl font-extrabold">
                     Отмена
                   </button>
                 </div>
@@ -993,28 +997,28 @@
       return (
         <div className="min-h-screen">
           <header className="bg-white/80 backdrop-blur-lg border-b sticky top-0 z-40 shadow-sm">
-            <div className="w-full px-6 py-5 flex items-center justify-between gap-3">
+            <div className="w-full px-8 py-7 flex items-center justify-between gap-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 text-white flex items-center justify-center font-extrabold shadow-lg">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-600 to-purple-600 text-white flex items-center justify-center font-extrabold shadow-lg">
                   FT
                 </div>
                 <div>
-                  <div className="text-xl font-semibold text-slate-900">Родословное дерево</div>
-                  <div className="text-sm text-slate-600">
+                  <div className="text-3xl font-extrabold text-slate-900">Родословное дерево</div>
+                  <div className="text-lg text-slate-600">
                     {isAdmin ? "Администратор" : "Гость"} • Cloud Firestore
                   </div>
                 </div>
               </div>
 
               <div className="flex items-center gap-2">
-                <div className="hidden sm:block text-sm text-slate-700">
+                <div className="hidden sm:block text-lg text-slate-700">
                   {isAdmin ? "👤 Админ" : "👁️ Гость"} • {user.isAnonymous ? "анонимно" : (user.email || "user")}
                 </div>
 
                 {!isAdmin && (
                   <button
                     onClick={() => setShowLogin(true)}
-                    className="px-3 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-all shadow-sm text-sm"
+                    className="px-5 py-3 rounded-2xl bg-indigo-600 text-white hover:bg-indigo-700 transition-all shadow-sm text-lg font-semibold"
                     title="Войти как администратор"
                   >
                     🔐
@@ -1023,7 +1027,7 @@
 
                 <button
                   onClick={handleLogout}
-                  className="px-3 py-2 rounded-lg bg-rose-600 text-white hover:bg-rose-700 transition-all shadow-sm text-sm"
+                  className="px-5 py-3 rounded-2xl bg-rose-600 text-white hover:bg-rose-700 transition-all shadow-sm text-lg font-semibold"
                 >
                   Выход
                 </button>
@@ -1056,7 +1060,7 @@
                   <div className="text-lg font-semibold text-slate-900">
                     {viewMode === "tree" ? "Дерево" : "Список людей"}
                   </div>
-                  <div className="text-sm text-slate-600">
+                  <div className="text-lg text-slate-600">
                     {viewMode === "tree" 
                       ? (isAdmin
                           ? "Нажми на «Дети», чтобы свернуть/развернуть поколения. ❤️/💔 — добавить ребёнка."
@@ -1079,15 +1083,13 @@
 
                   {viewMode === "tree" && (
                     <>
-                      {isAdmin && (
-                        <button
-                          onClick={() => { setRootsDraft(rootCoupleIds || []); setShowRootsModal(true); }}
+                      <button
+                          onClick={() => { setRootsDraft((effectiveRootCoupleIds || [])); setShowRootsModal(true); }}
                           className="px-6 py-3 rounded-2xl bg-amber-100 text-amber-900 hover:bg-amber-200 text-base font-semibold transition-all"
                           title="Выбрать корневые пары (чтобы сверху не связывались неродственные ветки)"
                         >
                           ⚓ Корни
                         </button>
-                      )}
                       <button
                         onClick={toggleAllExpanded}
                       className="px-6 py-3 rounded-2xl bg-purple-100 text-purple-800 hover:bg-purple-200 text-base font-semibold transition-all"
@@ -1135,10 +1137,10 @@
                         )}
                         
                         <div className="flex-1 min-w-0">
-                          <div className="font-semibold text-slate-900">
+                          <div className="text-lg font-bold text-slate-900">
                             {person.lastName} {person.firstName} {person.middleName}
                           </div>
-                          <div className="text-sm text-slate-700">
+                          <div className="text-base text-slate-700">
                             {person.gender === "F" ? "♀" : "♂"} {yearRange(person.birthDate, person.deathDate)}
                           </div>
                         </div>
@@ -1268,11 +1270,11 @@
 
           {showLogin && (
             <Modal onClose={() => setShowLogin(false)}>
-              <div className="text-lg font-semibold mb-4">Вход администратора</div>
+              <div className="text-3xl font-extrabold mb-6">Вход администратора</div>
               <div className="space-y-3">
                 <Field label="Email">
                   <input
-                    className="w-full border rounded-xl px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    className="w-full border rounded-2xl px-5 py-4 focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-xl"
                     type="email"
                     placeholder="admin@example.com"
                     value={email}
@@ -1281,7 +1283,7 @@
                 </Field>
                 <Field label="Пароль">
                   <input
-                    className="w-full border rounded-xl px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    className="w-full border rounded-2xl px-5 py-4 focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-xl"
                     type="password"
                     placeholder="Пароль"
                     value={password}
@@ -1291,8 +1293,8 @@
                 </Field>
               </div>
               <div className="mt-4 flex gap-2">
-                <button onClick={handleAdminLogin} className="flex-1 px-3 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 transition-all">Войти</button>
-                <button onClick={() => setShowLogin(false)} className="flex-1 px-3 py-2 rounded-xl bg-slate-200 text-slate-800 hover:bg-slate-300 transition-all">Отмена</button>
+                <button onClick={handleAdminLogin} className="flex-1 px-5 py-4 rounded-2xl bg-indigo-600 text-white hover:bg-indigo-700 transition-all text-xl font-extrabold">Войти</button>
+                <button onClick={() => setShowLogin(false)} className="flex-1 px-5 py-4 rounded-2xl bg-slate-200 text-slate-800 hover:bg-slate-300 transition-all text-xl font-extrabold">Отмена</button>
               </div>
             </Modal>
           )}
@@ -1313,24 +1315,30 @@
             />
           )}
 
-          {showRootsModal && isAdmin && (
-            <RootsModal
-              people={people}
-              couples={couples}
-              draft={rootsDraft}
-              setDraft={setRootsDraft}
-              onClose={() => setShowRootsModal(false)}
-              onSave={async () => {
-                try {
-                  const cleaned = Array.from(new Set((rootsDraft || []).filter(Boolean)));
-                  await db.collection("settings").doc("tree").set({ rootCoupleIds: cleaned }, { merge: true });
-                  setShowRootsModal(false);
-                } catch (e) {
-                  alert("Не удалось сохранить корни: " + (e?.message || e));
-                }
-              }}
-            />
-          )}
+          {showRootsModal && (
+  <RootsModal
+    people={people}
+    couples={couples}
+    draft={rootsDraft}
+    setDraft={setRootsDraft}
+    isAdmin={isAdmin}
+    onClose={() => setShowRootsModal(false)}
+    onSave={async () => {
+      const cleaned = Array.from(new Set((rootsDraft || []).filter(Boolean)));
+      if (isAdmin) {
+        try {
+          await db.collection("settings").doc("tree").set({ rootCoupleIds: cleaned }, { merge: true });
+          setShowRootsModal(false);
+        } catch (e) {
+          alert("Не удалось сохранить корни: " + (e?.message || e));
+        }
+      } else {
+        setGuestRootCoupleIds(cleaned);
+        setShowRootsModal(false);
+      }
+    }}
+  />
+)}
 
           {addChildModal.open && (
             <AddChildModal
@@ -1591,7 +1599,7 @@
             <div className="avatar">?</div>
             <div className="text-left min-w-0">
               <div className="font-semibold text-slate-900 truncate">Нет данных</div>
-              <div className="text-sm text-slate-600">—</div>
+              <div className="text-lg text-slate-600">—</div>
             </div>
           </div>
         );
@@ -1705,7 +1713,7 @@ function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, on
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 modal-overlay">
           <div className="bg-white rounded-3xl w-full max-w-5xl max-h-[92vh] overflow-y-auto p-8 shadow-2xl modal-content">
             <div className="flex justify-end">
-              <button onClick={onClose} className="px-3 py-1 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm">
+              <button onClick={onClose} className="px-5 py-3 rounded-2xl bg-slate-200 hover:bg-slate-300 text-slate-800 text-lg font-semibold">
                 Закрыть
               </button>
             </div>
@@ -1780,7 +1788,7 @@ function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, on
         <Modal onClose={onClose}>
           <div className="flex items-center justify-between gap-3 mb-3">
             <div className="text-lg font-semibold">{person ? "Редактировать человека" : "Добавить человека"}</div>
-            <div className="text-sm text-slate-600">* обязательные поля</div>
+            <div className="text-lg text-slate-600">* обязательные поля</div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -1827,7 +1835,7 @@ function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, on
 
           <div className="mt-4 flex gap-2">
             <button onClick={submit} className="flex-1 px-3 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700">Сохранить</button>
-            <button onClick={onClose} className="flex-1 px-3 py-2 rounded-xl bg-slate-200 text-slate-800 hover:bg-slate-300">Отмена</button>
+            <button onClick={onClose} className="flex-1 px-4 py-3 rounded-2xl bg-slate-200 text-slate-800 hover:bg-slate-300 text-lg font-semibold">Отмена</button>
           </div>
         </Modal>
       );
@@ -1871,7 +1879,7 @@ function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, on
 
           <div className="mt-4 flex gap-2">
             <button onClick={submit} className="flex-1 px-3 py-2 rounded-xl bg-sky-600 text-white hover:bg-sky-700">Добавить</button>
-            <button onClick={onClose} className="flex-1 px-3 py-2 rounded-xl bg-slate-200 text-slate-800 hover:bg-slate-300">Отмена</button>
+            <button onClick={onClose} className="flex-1 px-4 py-3 rounded-2xl bg-slate-200 text-slate-800 hover:bg-slate-300 text-lg font-semibold">Отмена</button>
           </div>
         </Modal>
       );
@@ -1973,7 +1981,7 @@ function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, on
 
           <div className="mt-4 flex gap-2">
             <button onClick={submit} className="flex-1 px-3 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700">Добавить</button>
-            <button onClick={onClose} className="flex-1 px-3 py-2 rounded-xl bg-slate-200 text-slate-800 hover:bg-slate-300">Отмена</button>
+            <button onClick={onClose} className="flex-1 px-4 py-3 rounded-2xl bg-slate-200 text-slate-800 hover:bg-slate-300 text-lg font-semibold">Отмена</button>
           </div>
         </Modal>
       );
@@ -1996,7 +2004,7 @@ function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, on
             <div className="flex items-start justify-between gap-4 mb-4">
               <div>
                 <div className="text-4xl font-extrabold text-slate-900">{person.lastName} {person.firstName}</div>
-                <div className="text-sm text-slate-600">{person.middleName || ""}</div>
+                <div className="text-lg text-slate-600">{person.middleName || ""}</div>
                 <div className="text-sm text-slate-600 mt-1">
                   {person.gender === "F" ? "♀ Женщина" : "♂ Мужчина"} • {yearRange(person.birthDate, person.deathDate)}
                 </div>
@@ -2028,13 +2036,13 @@ function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, on
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 {person.birthDate && (
                   <div className="text-base bg-slate-50 border rounded-3xl p-5">
-                    <div className="font-semibold text-slate-900">Рождение</div>
+                    <div className="text-lg font-bold text-slate-900">Рождение</div>
                     <div className="text-slate-600 mt-1">{new Date(person.birthDate).toLocaleDateString("ru-RU")}</div>
                   </div>
                 )}
                 {person.deathDate && (
                   <div className="text-base bg-slate-50 border rounded-3xl p-5">
-                    <div className="font-semibold text-slate-900">Смерть</div>
+                    <div className="text-lg font-bold text-slate-900">Смерть</div>
                     <div className="text-slate-600 mt-1">{new Date(person.deathDate).toLocaleDateString("ru-RU")}</div>
                   </div>
                 )}
@@ -2042,21 +2050,21 @@ function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, on
 
               {person.description && (
                 <div className="text-base bg-slate-50 border rounded-3xl p-5">
-                  <div className="font-semibold text-slate-900">Описание</div>
+                  <div className="text-lg font-bold text-slate-900">Описание</div>
                   <p className="text-slate-600 mt-1 whitespace-pre-wrap">{person.description}</p>
                 </div>
               )}
 
               {person.biography && (
                 <div className="text-base bg-slate-50 border rounded-3xl p-5">
-                  <div className="font-semibold text-slate-900">Автобиография</div>
+                  <div className="text-lg font-bold text-slate-900">Автобиография</div>
                   <p className="text-slate-700 mt-1 whitespace-pre-wrap leading-relaxed">{person.biography}</p>
                 </div>
               )}
 
               {personCouples.length > 0 && (
                 <div className="text-base bg-slate-50 border rounded-3xl p-5">
-                  <div className="font-semibold text-slate-900">Партнёры</div>
+                  <div className="text-lg font-bold text-slate-900">Партнёры</div>
                   <ul className="mt-2 space-y-1">
                     {personCouples.map(c => {
                       const partner = c.partner1Id === person.id
@@ -2075,7 +2083,7 @@ function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, on
 
               {(person.photos || []).length > 0 && (
                 <div className="text-base bg-slate-50 border rounded-3xl p-5">
-                  <div className="font-semibold text-slate-900">Альбом</div>
+                  <div className="text-lg font-bold text-slate-900">Альбом</div>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-4">
                     {(person.photos || []).map((photo, idx) => (
                       <div key={idx} className="relative group">
@@ -2116,7 +2124,7 @@ function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, on
                   {comments.map(c => (
                     <div key={c.id} className="bg-slate-100 rounded-2xl p-3 text-sm border">
                       <div className="flex items-center justify-between gap-2 mb-1">
-                        <span className="font-semibold text-slate-900">{c.author || "—"}</span>
+                        <span className="text-lg font-bold text-slate-900">{c.author || "—"}</span>
                         {isAdmin && (
                           <button onClick={() => onDeleteComment(c.id)} className="text-rose-600 hover:text-rose-700 text-sm" title="Удалить комментарий">
                             ✕
@@ -2154,7 +2162,7 @@ function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, on
     }
 
 
-    function RootsModal({ people, couples, draft, setDraft, onClose, onSave }) {
+    function RootsModal({ people, couples, draft, setDraft, onClose, onSave, isAdmin }) {
       const nameOf = (id) => {
         const p = people.find(x => x.id === id);
         return p ? safeName(p) : "—";
@@ -2170,30 +2178,30 @@ function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, on
 
       return (
         <Modal onClose={onClose}>
-          <div className="text-lg font-semibold mb-2">Корневые пары</div>
-          <div className="text-sm text-slate-600 mb-4">
+          <div className="text-2xl font-extrabold mb-2">Корневые пары</div>
+          <div className="text-lg text-slate-600 mb-4">
             Выбери пары, с которых начинается дерево. Это убирает «связи» между неродственными верхними ветками.
           </div>
 
-          <div className="space-y-2 max-h-[55vh] overflow-y-auto pr-1">
+          <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
             {couples.length === 0 ? (
               <div className="text-slate-600">Пока нет пар.</div>
             ) : (
               couples.map(c => {
                 const checked = (draft || []).includes(c.id);
                 return (
-                  <label key={c.id} className="flex items-start gap-3 p-3 border rounded-xl hover:bg-slate-50 cursor-pointer">
+                  <label key={c.id} className="flex items-start gap-4 p-4 border rounded-2xl hover:bg-slate-50 cursor-pointer">
                     <input
                       type="checkbox"
-                      className="mt-1"
+                      className="mt-1 w-5 h-5"
                       checked={checked}
                       onChange={() => toggle(c.id)}
                     />
                     <div className="min-w-0">
-                      <div className="font-semibold text-slate-900">
+                      <div className="text-lg font-bold text-slate-900">
                         {nameOf(c.partner1Id)} {c.status === "divorced" ? "💔" : "❤️"} {nameOf(c.partner2Id)}
                       </div>
-                      <div className="text-sm text-slate-700">
+                      <div className="text-base text-slate-700">
                         Дети: {(c.childrenIds || []).length}
                       </div>
                     </div>
@@ -2204,16 +2212,16 @@ function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, on
           </div>
 
           <div className="mt-4 flex gap-2">
-            <button onClick={onSave} className="flex-1 px-3 py-2 rounded-xl bg-amber-600 text-white hover:bg-amber-700">
-              Сохранить корни
+            <button onClick={onSave} className="flex-1 px-4 py-3 rounded-2xl bg-amber-600 text-white hover:bg-amber-700 text-lg font-semibold">
+              {isAdmin ? "Сохранить корни" : "Применить"}
             </button>
-            <button onClick={onClose} className="flex-1 px-3 py-2 rounded-xl bg-slate-200 text-slate-800 hover:bg-slate-300">
+            <button onClick={onClose} className="flex-1 px-4 py-3 rounded-2xl bg-slate-200 text-slate-800 hover:bg-slate-300 text-lg font-semibold">
               Отмена
             </button>
           </div>
 
           <div className="text-sm text-slate-600 mt-3">
-            Если ничего не выбрать, будет использован текущий автоматический алгоритм.
+            Если ничего не выбрать, будет использован текущий автоматический алгоритм. {isAdmin ? "" : " Для гостя выбор сохраняется только в этом браузере."}
           </div>
         </Modal>
       );
