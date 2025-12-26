@@ -1104,9 +1104,15 @@
                             ); })()}
                             <div
                               className="coupleMid"
-                              title={isAdmin ? "Добавить ребёнка" : "Только админ может менять дерево"}
+                              title={isAdmin ? "Добавить ребёнка" : "Показать/скрыть детей"}
                               aria-disabled={!isAdmin}
-                              onClick={() => isAdmin && openAddChild(cp.id)}
+                              onClick={() => {
+                                if (isAdmin) {
+                                  openAddChild(cp.id);
+                                } else {
+                                  toggleCoupleExpanded(cp.id);
+                                }
+                              }}
                             >
                               {cp.status === "divorced" ? "💔" : "❤️"}
                             </div>
@@ -1386,7 +1392,7 @@
 
                 <div
                   className="coupleMid"
-                  title={isAdmin ? "Добавить ребёнка" : "Только админ может менять дерево"}
+                  title={isAdmin ? "Добавить ребёнка" : "Показать/скрыть детей"}
                   aria-disabled={!isAdmin}
                   onClick={() => isAdmin && onOpenAddChild(couple.id)}
                 >
@@ -1592,7 +1598,7 @@ function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, on
 
       <div
         className="coupleMid"
-        title={isAdmin ? "Добавить ребёнка" : "Только админ может менять дерево"}
+        title={isAdmin ? "Добавить ребёнка" : "Показать/скрыть детей"}
         aria-disabled={!isAdmin}
         onClick={() => isAdmin && onAddChild()}
       >
