@@ -333,6 +333,35 @@
       const [viewMode, setViewMode] = useState("tree"); // "tree" или "list"
       const [searchQuery, setSearchQuery] = useState("");
 
+      const filteredPeople = useMemo(() => {
+              if (!searchQuery.trim()) return people;
+              
+              const query = searchQuery.toLowerCase().trim();
+              return people.filter(p => {
+                const lastName = (p.lastName || "").toLowerCase();
+                const firstName = (p.firstName || "").toLowerCase();
+                const middleName = (p.middleName || "").toLowerCase();
+                return lastName.includes(query) || firstName.includes(query) || middleName.includes(query);
+              });
+            }, [people, searchQuery]);
+      
+            const sortedPeopleByAge = useMemo(() => {
+              return [...filteredPeople].sort((a, b) => {
+                const yearA = a.birthDate ? new Date(a.birthDate).getFullYear() : 9999;
+                const yearB = b.birthDate ? new Date(b.birthDate).getFullYear() : 9999;
+                return yearA - yearB;
+              });
+
+
+      const matchesSearch = (person) => {
+        const q = (searchQuery || "").toLowerCase().trim();
+        if (!q) return true;
+        const lastName = (person?.lastName || "").toLowerCase();
+        const firstName = (person?.firstName || "").toLowerCase();
+        const middleName = (person?.middleName || "").toLowerCase();
+        return lastName.includes(q) || firstName.includes(q) || middleName.includes(q);
+      };
+
       const [showPersonForm, setShowPersonForm] = useState(false);
       const [editingPerson, setEditingPerson] = useState(null);
 
@@ -1062,7 +1091,7 @@
                       {row.couples.map(cp => (
                         <div key={cp.id} className="coupleContainer" data-couple-anchor={cp.id}>
                           <div className="coupleRow">
-                            <PersonCardMini person={people.find(p => p.id === cp.partner1Id) || null} onClick={() => setSelectedPersonId(cp.partner1Id)} />
+                            <div style={{ opacity: matchesSearch(people.find(p => p.id === cp.partner1Id)) ? 1 : 0.25 }}><PersonCardMini person={people.find(p => p.id === cp.partner1Id) || null} onClick={() => setSelectedPersonId(cp.partner1Id)} /></div>
                             <div
                               className="coupleMid"
                               title={isAdmin ? "Добавить ребёнка" : "Только админ может менять дерево"}
@@ -1071,7 +1100,7 @@
                             >
                               {cp.status === "divorced" ? "💔" : "❤️"}
                             </div>
-                            <PersonCardMini person={people.find(p => p.id === cp.partner2Id) || null} onClick={() => setSelectedPersonId(cp.partner2Id)} />
+                            <div style={{ opacity: matchesSearch(people.find(p => p.id === cp.partner2Id)) ? 1 : 0.25 }}><PersonCardMini person={people.find(p => p.id === cp.partner2Id) || null} onClick={() => setSelectedPersonId(cp.partner2Id)} /></div>
                           </div>
 
                           <div className="mt-2 flex items-center justify-center gap-2">
@@ -1099,9 +1128,7 @@
                       ))}
 
                       {row.singles.map(p => (
-                        <div key={p.id} className="mt-2" data-person-anchor={p.id}>
-                          <PersonCardMini person={p} onClick={() => setSelectedPersonId(p.id)} />
-                        </div>
+                        <div key={p.id} className="mt-2" data-person-anchor={p.id} style={{ opacity: matchesSearch(p) ? 1 : 0.25 }}><PersonCardMini person={p} onClick={() => setSelectedPersonId(p.id)} /></div>
                       ))}
                     </div>
                   ))}
