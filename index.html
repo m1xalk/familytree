@@ -1005,7 +1005,7 @@
                 <div>
                   <div className="text-3xl font-extrabold text-slate-900">Родословное дерево</div>
                   <div className="text-lg text-slate-600">
-                    {isAdmin ? "Администратор" : "Гость"} 
+                    {isAdmin ? "Администратор" : "Гость"} • Cloud Firestore
                   </div>
                 </div>
               </div>
@@ -2022,7 +2022,7 @@ function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, on
               )}
             </div>
 
-                        <div className="flex justify-center mt-6 mb-8">
+                        <div className="flex justify-center -mt-2 mb-6">
               {person.mainPhoto ? (
                 <img
                   src={person.mainPhoto}
