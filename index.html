@@ -725,27 +725,41 @@
         // init
         for (const p of people) personLevel[p.id] = 0;
 
-        // iterative relaxation (handles multiple parents; avoids recursion depth issues)
-        const maxIter = Math.max(50, (people.length + couples.length) * 2);
+        // iterative relaxation:
+        // 1) top-down: parents -> child (+1)
+        // 2) bottom-up anchor: child -> parents (childLevel - 1)
+        // This prevents a parent-couple from "jumping upward" into an earlier generation
+        // just because their own parents are missing / removed.
+        const maxIter = Math.max(80, (people.length + couples.length) * 3);
         for (let iter = 0; iter < maxIter; iter++) {
           let changed = false;
 
+          // A) compute couple levels (also anchored by their children, if any)
           for (const c of couples) {
             const l1 = personLevel[c.partner1Id] ?? 0;
             const l2 = personLevel[c.partner2Id] ?? 0;
-            let cl = Math.max(l1, l2);
-            // Если один партнёр — «корневой» (не является чьим‑то ребёнком),
-            // а второй имеет родителей в дереве, то не поднимаем корневого партнёра
-            // на уровень второго. Вместо этого держим пару на более «верхнем» уровне.
-            const p1IsChild = personIsChild.has(c.partner1Id);
-            const p2IsChild = personIsChild.has(c.partner2Id);
-            if (p1IsChild !== p2IsChild) {
-              cl = Math.min(l1, l2);
+
+            // if couple already has children with known level, couple can't be above (min generation) of child-1
+            let childAnchor = 0;
+            if (c.childrenIds && c.childrenIds.length) {
+              let maxChild = 0;
+              for (const ch of c.childrenIds) {
+                const cl = personLevel[ch] ?? 0;
+                if (cl > maxChild) maxChild = cl;
+              }
+              childAnchor = Math.max(0, maxChild - 1);
             }
+
+            const cl = Math.max(l1, l2, childAnchor);
             if (coupleLevel[c.id] !== cl) {
               coupleLevel[c.id] = cl;
               changed = true;
             }
+          }
+
+          // B) parents -> children
+          for (const c of couples) {
+            const cl = coupleLevel[c.id] ?? 0;
             const next = cl + 1;
             for (const ch of (c.childrenIds || [])) {
               const prev = personLevel[ch] ?? 0;
@@ -753,6 +767,23 @@
                 personLevel[ch] = next;
                 changed = true;
               }
+            }
+          }
+
+          // C) children -> parents (anchor)
+          for (const c of couples) {
+            for (const ch of (c.childrenIds || [])) {
+              const childL = personLevel[ch] ?? 0;
+              const need = Math.max(0, childL - 1);
+
+              const p1 = c.partner1Id;
+              const p2 = c.partner2Id;
+
+              const prev1 = personLevel[p1] ?? 0;
+              const prev2 = personLevel[p2] ?? 0;
+
+              if (need > prev1) { personLevel[p1] = need; changed = true; }
+              if (need > prev2) { personLevel[p2] = need; changed = true; }
             }
           }
 
@@ -797,7 +828,7 @@
 
         for (const c of couples) {
           if (!allowedCoupleIds.has(c.id)) continue;
-          const lvl = coupleLevel[c.id] ?? 0;
+          const lvl = coupleLevel[c.id] ?? Math.max(personLevel[c.partner1Id] ?? 0, personLevel[c.partner2Id] ?? 0);
           if (!rows[lvl]) continue;
           rows[lvl].couples.push(c);
         }
