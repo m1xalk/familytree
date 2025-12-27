@@ -256,6 +256,56 @@
     .coupleMid { width: 56px; height: 56px; font-size: 22px; }
     .treeToggleBtn { font-size: 18px !important; padding: 10px 16px !important; }
     .treeActionBtn { font-size: 18px !important; padding: 10px 16px !important; }
+
+
+/* =========================================================
+   MOBILE WIDE TREE (ONLY MOBILE BEHAVIOR CHANGE)
+   Goal: keep desktop-like "wide" layout on phones + horizontal swipe.
+   ========================================================= */
+@media (max-width: 768px) {
+  /* allow horizontal swipe */
+  body { overflow-x: auto !important; }
+
+  /* tree becomes a wide canvas */
+  .tree {
+    overflow-x: auto !important;
+    overflow-y: visible !important;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 48px;
+  }
+
+  /* keep rows in a single line (no wrapping into a column) */
+  .tree .flex.flex-wrap { flex-wrap: nowrap !important; }
+
+  /* make the inner tree content take its natural width */
+  .tree > .w-full,
+  .tree > div,
+  .tree .w-full.flex.flex-col.items-center {
+    min-width: max-content !important;
+  }
+
+  /* Undo the "stacked" mobile card layout */
+  .personCard {
+    flex-direction: row !important;
+    text-align: left !important;
+    max-width: 560px !important;
+    gap: 10px !important;
+  }
+  .personCard .text-left { text-align: left !important; }
+
+  /* Slightly scale down on mobile, but keep proportions */
+  .personCard { transform: scale(0.88); transform-origin: top center; }
+  .avatar { width: 60px !important; height: 60px !important; font-size: 20px !important; }
+  .coupleMid { width: 46px !important; height: 46px !important; font-size: 20px !important; }
+
+  /* Make the generation gaps a bit tighter on small screens */
+  .tree .gap-20 { gap: 56px !important; }
+  .tree .gap-16 { gap: 40px !important; }
+
+  /* Optional: keep header readable without shrinking everything */
+  header .w-full { padding-left: 16px !important; padding-right: 16px !important; }
+}
+
 </style>
 </head>
 
