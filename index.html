@@ -191,16 +191,31 @@
 
     /* Мобильная адаптация */
     @media (max-width: 640px) {
-      .tree { padding: 8px; }
-      .tree li { min-width: 180px; padding: 18px 4px 0 4px; }
-      .tree ul { padding-top: 18px; }
-      .tree ul ul::before { height: 18px; }
-      .tree li::before, .tree li::after { height: 18px; }
+      body { font-size: 14px; }
+      
+      /* Горизонтальная прокрутка для дерева */
+      .tree { 
+        padding: 12px; 
+        overflow-x: auto;
+        overflow-y: visible;
+        -webkit-overflow-scrolling: touch;
+        min-width: min-content;
+      }
+      
+      .tree li { 
+        min-width: 140px; 
+        padding: 16px 6px 0 6px; 
+      }
+      
+      .tree ul { padding-top: 16px; }
+      .tree ul ul::before { height: 16px; }
+      .tree li::before, .tree li::after { height: 16px; }
       
       .personCard { 
-        max-width: 160px; 
-        padding: 6px 8px; 
-        border-radius: 14px;
+        max-width: 130px;
+        min-width: 130px;
+        padding: 8px 10px; 
+        border-radius: 16px;
         gap: 6px;
         flex-direction: column;
         text-align: center;
@@ -208,24 +223,72 @@
       
       .personCard .text-left {
         text-align: center !important;
+        width: 100%;
       }
       
-      .avatar { width: 36px; height: 36px; font-size: 14px; }
-      .coupleMid { width: 30px; height: 30px; font-size: 16px; }
-      .coupleRow { gap: 8px; }
+      .avatar { width: 42px; height: 42px; font-size: 16px; }
+      .coupleMid { width: 34px; height: 34px; font-size: 18px; }
+      .coupleRow { gap: 10px; }
       
-      /* Уменьшаем текст в карточках */
-      .personCard .font-semibold { font-size: 12px; }
-      .personCard .text-xs { font-size: 10px; }
+      /* Текст в карточках */
+      .personCard .font-semibold { font-size: 11px; line-height: 1.2; }
+      .personCard .text-sm { font-size: 9px; line-height: 1.2; }
+      
+      /* Кнопки под парами */
+      .treeToggleBtn, .treeActionBtn { 
+        font-size: 11px !important; 
+        padding: 6px 10px !important; 
+        white-space: nowrap;
+      }
+      
+      /* Хедер */
+      header .w-14 { width: 48px; height: 48px; }
+      header .text-3xl { font-size: 20px; }
+      header .text-lg { font-size: 14px; }
+      header button { padding: 8px 12px; font-size: 14px; }
+      
+      /* Контролы */
+      main { padding: 12px; }
+      main button { font-size: 14px; padding: 10px 16px; }
+      
+      /* Поиск */
+      input[type="text"], input[type="email"], input[type="password"] {
+        font-size: 14px;
+        padding: 10px 12px !important;
+      }
+      
+      /* Предупреждение о горизонтальной прокрутке */
+      .tree-scroll-hint {
+        display: block;
+        text-align: center;
+        padding: 8px;
+        background: #fef3c7;
+        border-radius: 12px;
+        margin-bottom: 12px;
+        font-size: 12px;
+        color: #92400e;
+      }
     }
 
     @media (max-width: 480px) {
-      .tree li { min-width: 140px; }
-      .personCard { max-width: 130px; padding: 5px 6px; }
-      .avatar { width: 32px; height: 32px; font-size: 12px; }
-      .coupleMid { width: 26px; height: 26px; font-size: 14px; }
-      .personCard .font-semibold { font-size: 11px; }
-      .personCard .text-xs { font-size: 9px; }
+      .tree li { min-width: 120px; padding: 14px 4px 0 4px; }
+      .personCard { max-width: 115px; min-width: 115px; padding: 6px 8px; }
+      .avatar { width: 38px; height: 38px; font-size: 14px; }
+      .coupleMid { width: 30px; height: 30px; font-size: 16px; }
+      .personCard .font-semibold { font-size: 10px; }
+      .personCard .text-sm { font-size: 8px; }
+      .treeToggleBtn, .treeActionBtn { font-size: 10px !important; padding: 5px 8px !important; }
+    }
+    
+    /* Показываем подсказку только на мобильных */
+    .tree-scroll-hint {
+      display: none;
+    }
+    
+    @media (max-width: 640px) {
+      .tree-scroll-hint {
+        display: block;
+      }
     }
   
     /* === Graph SVG links (like index211), behind cards === */
