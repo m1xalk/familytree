@@ -678,23 +678,63 @@
           return;
         }
 
-        const fileName = (file.name || "photo").replace(/[^a-zA-Z0-9._-]/g, "_");
-        const id = uid();
-        const path = `people/${personId}/photos/${id}_${fileName}`;
-        const ref = storage.ref().child(path);
+        if (!personId) {
+          alert("Не найден personId (карточка человека).");
+          return;
+        }
+
+        // Проверка типа файла
+        if (!file.type || !file.type.startsWith("image/")) {
+          alert("Можно загружать только изображения");
+          return;
+        }
+
+        // Проверка размера (макс 5MB)
+        if (typeof file.size === "number" && file.size > 5 * 1024 * 1024) {
+          alert("Файл слишком большой (максимум 5 МБ)");
+          return;
+        }
+
+        const safeName = (String(file.name || "photo")).replace(/[^a-zA-Z0-9._-]/g, "_");
+        const id = (typeof uid === "function") ? uid() : String(Date.now());
+        const path = `people/${personId}/photos/${id}_${safeName}`;
+
+        console.log("Загрузка фото:", { personId, path, name: safeName, size: file.size, type: file.type, uid: user?.uid });
 
         try {
-          await ref.put(file);
+          const ref = storage.ref().child(path);
+
+          const snapshot = await ref.put(file, {
+            contentType: file.type,
+            customMetadata: {
+              uploadedBy: user.uid,
+              personId: String(personId),
+            }
+          });
+
+          console.log("Фото загружено успешно:", snapshot);
+
           const url = await ref.getDownloadURL();
+          console.log("URL получен:", url);
+
           const author = isAdmin ? "Администратор" : (user.isAnonymous ? "Гость" : (user.email || "Пользователь"));
           const photoObj = { id, url, path, uploadedAt: new Date().toISOString(), uploadedBy: author };
-          await db.collection("people").doc(personId).update({
-            photos: firebase.firestore.FieldValue.arrayUnion(photoObj)
-          });
+
+          // set + merge надёжнее: update падает, если документа ещё нет
+          await db.collection("people").doc(personId).set(
+            { photos: firebase.firestore.FieldValue.arrayUnion(photoObj) },
+            { merge: true }
+          );
+
           setSelectedPersonId(personId);
+          alert("Фото успешно загружено!");
         } catch (err) {
-          console.error(err);
-          alert("Не удалось загрузить фото: " + (err?.message || err));
+          console.error("Ошибка загрузки фото:", err);
+          const code = err?.code;
+          let msg = "Не удалось загрузить фото: ";
+          if (code === "storage/unauthorized") msg += "Нет прав доступа к Storage.";
+          else msg += (err?.message || String(err));
+          alert(msg);
         }
       };
 
@@ -726,15 +766,41 @@
           return;
         }
 
-        const fileName = (file.name || "document").replace(/[^a-zA-Z0-9._-]/g, "_");
-        const id = uid();
-        const path = `people/${personId}/docs/${id}_${fileName}`;
-        const ref = storage.ref().child(path);
+        if (!personId) {
+          alert("Не найден personId (карточка человека).");
+          return;
+        }
+
+        // Ограничение размера (макс 15MB)
+        if (typeof file.size === "number" && file.size > 15 * 1024 * 1024) {
+          alert("Файл слишком большой (максимум 15 МБ)");
+          return;
+        }
+
+        const safeName = (String(file.name || "document")).replace(/[^a-zA-Z0-9._-]/g, "_");
+        const id = (typeof uid === "function") ? uid() : String(Date.now());
+        const path = `people/${personId}/docs/${id}_${safeName}`;
+
+        console.log("Загрузка документа:", { personId, path, name: safeName, size: file.size, type: file.type, uid: user?.uid });
 
         try {
-          await ref.put(file);
+          const ref = storage.ref().child(path);
+
+          const snapshot = await ref.put(file, {
+            contentType: file.type || "application/octet-stream",
+            customMetadata: {
+              uploadedBy: user.uid,
+              personId: String(personId),
+            }
+          });
+
+          console.log("Документ загружен успешно:", snapshot);
+
           const url = await ref.getDownloadURL();
+          console.log("URL получен:", url);
+
           const author = isAdmin ? "Администратор" : (user.isAnonymous ? "Гость" : (user.email || "Пользователь"));
+
           const docObj = {
             id,
             name: file.name || "Документ",
@@ -745,6 +811,23 @@
             uploadedAt: new Date().toISOString(),
             uploadedBy: author
           };
+
+          await db.collection("people").doc(personId).set(
+            { documents: firebase.firestore.FieldValue.arrayUnion(docObj) },
+            { merge: true }
+          );
+
+          setSelectedPersonId(personId);
+          alert("Документ успешно загружен!");
+        } catch (err) {
+          console.error("Ошибка загрузки документа:", err);
+          const code = err?.code;
+          let msg = "Не удалось загрузить документ: ";
+          if (code === "storage/unauthorized") msg += "Нет прав доступа к Storage.";
+          else msg += (err?.message || String(err));
+          alert(msg);
+        }
+      };
           await db.collection("people").doc(personId).update({
             documents: firebase.firestore.FieldValue.arrayUnion(docObj)
           });
