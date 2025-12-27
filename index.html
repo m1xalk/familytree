@@ -366,6 +366,40 @@
         [people, selectedPersonId]
       );
 
+      // Live album/docs lists (stored in Firestore subcollections)
+      const [albumItems, setAlbumItems] = useState([]);
+      const [docItems, setDocItems] = useState([]);
+
+      useEffect(() => {
+        if (!selectedPersonId) {
+          setAlbumItems([]);
+          setDocItems([]);
+          return;
+        }
+
+        const albumUnsub = db
+          .collection("people")
+          .doc(selectedPersonId)
+          .collection("album")
+          .orderBy("createdAt", "desc")
+          .onSnapshot(
+            (snap) => setAlbumItems(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+            (err) => { console.warn("Album subscribe failed:", err); setAlbumItems([]); }
+          );
+
+        const docsUnsub = db
+          .collection("people")
+          .doc(selectedPersonId)
+          .collection("docs")
+          .orderBy("createdAt", "desc")
+          .onSnapshot(
+            (snap) => setDocItems(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+            (err) => { console.warn("Docs subscribe failed:", err); setDocItems([]); }
+          );
+
+        return () => { try { albumUnsub(); } catch(e) {} try { docsUnsub(); } catch(e) {} };
+      }, [selectedPersonId]);
+
       const [expandedCouples, setExpandedCouples] = useState(new Set());
       const [allExpanded, setAllExpanded] = useState(true);
 
@@ -808,11 +842,13 @@
     const photoObj = { id, url, path, uploadedAt: new Date().toISOString(), uploadedBy: author };
 
     try {
-      await db.collection("people").doc(personId).set(
-        { photos: firebase.firestore.FieldValue.arrayUnion(photoObj) },
-        { merge: true }
-      );
-      console.log("Фото добавлено в Firestore");
+      await db.collection("people").doc(personId)
+        .collection("album").doc(id)
+        .set({
+          ...photoObj,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+      console.log("Фото добавлено в Firestore (album subcollection)");
     } catch (e) {
       console.warn("Firestore write skipped/failed (rules?):", e);
       // В крайнем случае покажем ссылку, чтобы не терять результат
@@ -833,23 +869,26 @@
   }
 };
 
-      const deleteAlbumPhoto = async (personId, index) => {
+      const deleteAlbumPhoto = async (personId, photo) => {
         if (!isAdmin) return;
-        const person = people.find(p => p.id === personId);
-        const current = (person?.photos || []);
-        const toDelete = current[index];
-        const next = current.filter((_, i) => i !== index);
+        if (!personId || !photo) return;
 
         try {
-          if (toDelete && typeof toDelete === "object" && toDelete.path) {
-            await storage.ref().child(toDelete.path).delete();
+          if (photo && typeof photo === "object" && photo.path) {
+            await storage.ref().child(photo.path).delete();
           }
         } catch (err) {
-          // Даже если не удалилось из Storage — всё равно уберём из Firestore (чтобы не «ломать» UI)
           console.warn("Storage delete failed:", err);
         }
 
-        await db.collection("people").doc(personId).update({ photos: next });
+        try {
+          const docId = (photo && typeof photo === "object" && photo.id) ? photo.id : null;
+          if (docId) {
+            await db.collection("people").doc(personId).collection("album").doc(docId).delete();
+          }
+        } catch (err) {
+          console.warn("Firestore delete failed:", err);
+        }
       };
 
       // =========================
@@ -864,7 +903,7 @@
   }
 
   // Ограничение размера (макс 30MB)
-  if (typeof file.size === "number" && file.size > 130 * 1024 * 1024) {
+  if (typeof file.size === "number" && file.size > 30 * 1024 * 1024) {
     alert("Файл слишком большой (максимум 30 МБ)");
     return;
   }
@@ -910,11 +949,13 @@
     };
 
     try {
-      await db.collection("people").doc(personId).set(
-        { documents: firebase.firestore.FieldValue.arrayUnion(docObj) },
-        { merge: true }
-      );
-      console.log("Документ добавлен в Firestore");
+      await db.collection("people").doc(personId)
+        .collection("docs").doc(id)
+        .set({
+          ...docObj,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+      console.log("Документ добавлен в Firestore (docs subcollection)");
     } catch (e) {
       console.warn("Firestore write skipped/failed (rules?):", e);
       alert("Документ загружен в Storage, но не удалось записать в базу. URL: " + url);
@@ -934,22 +975,26 @@
   }
 };
 
-      const deletePersonDocument = async (personId, index) => {
+      const deletePersonDocument = async (personId, doc) => {
         if (!isAdmin) return;
-        const person = people.find(p => p.id === personId);
-        const current = (person?.documents || []);
-        const toDelete = current[index];
-        const next = current.filter((_, i) => i !== index);
+        if (!personId || !doc) return;
 
         try {
-          if (toDelete && typeof toDelete === "object" && toDelete.path) {
-            await storage.ref().child(toDelete.path).delete();
+          if (doc && typeof doc === "object" && doc.path) {
+            await storage.ref().child(doc.path).delete();
           }
         } catch (err) {
           console.warn("Storage delete failed:", err);
         }
 
-        await db.collection("people").doc(personId).update({ documents: next });
+        try {
+          const docId = (doc && typeof doc === "object" && doc.id) ? doc.id : null;
+          if (docId) {
+            await db.collection("people").doc(personId).collection("docs").doc(docId).delete();
+          }
+        } catch (err) {
+          console.warn("Firestore delete failed:", err);
+        }
       };
 
       // =========================
@@ -1540,10 +1585,12 @@
                 newComment={newComment}
                 setNewComment={setNewComment}
                 onAddComment={addComment}
+                albumPhotos={albumItems}
+                documents={docItems}
                 onAddAlbumPhoto={(file) => addPhotoToAlbum(selectedPerson.id, file)}
-                onDeleteAlbumPhoto={(idx) => deleteAlbumPhoto(selectedPerson.id, idx)}
+                onDeleteAlbumPhoto={(photo) => deleteAlbumPhoto(selectedPerson.id, photo)}
                 onAddDocument={(file) => addDocumentToPerson(selectedPerson.id, file)}
-                onDeleteDocument={(idx) => deletePersonDocument(selectedPerson.id, idx)}
+                onDeleteDocument={(doc) => deletePersonDocument(selectedPerson.id, doc)}
                 canContribute={!!user}
               />
             )}
@@ -2303,18 +2350,14 @@ const handleMainPhoto = (file) => {
       couples, people, comments,
       onDeleteComment,
       newComment, setNewComment, onAddComment,
-      onAddAlbumPhoto, onDeleteAlbumPhoto,
-      onAddDocument, onDeleteDocument,
+      albumPhotos, onAddAlbumPhoto, onDeleteAlbumPhoto,
+      documents, onAddDocument, onDeleteDocument,
       canContribute
     }) {
       const [lightboxSrc, setLightboxSrc] = useState("");
 
-      const albumPhotos = (person?.photos || []).map((ph) => {
-        if (!ph) return null;
-        if (typeof ph === "string") return { url: ph, legacy: true };
-        if (typeof ph === "object" && ph.url) return ph;
-        return null;
-      }).filter(Boolean);
+      const safeAlbum = Array.isArray(albumPhotos) ? albumPhotos : [];
+      const safeDocs = Array.isArray(documents) ? documents : [];
 
       const personDocs = (person?.documents || []).map((d) => {
         if (!d) return null;
@@ -2431,11 +2474,11 @@ const handleMainPhoto = (file) => {
               <div className="text-base bg-slate-50 border rounded-3xl p-5">
                 <div className="text-lg font-bold text-slate-900">Альбом</div>
 
-                {(person.photos || []).length === 0 ? (
+                {safeAlbum.length === 0 ? (
                   <div className="text-slate-600 mt-2">Пока нет фотографий.</div>
                 ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-4">
-                    {(person.photos || []).map((photo, idx) => {
+                    {safeAlbum.map((photo, idx) => {
                       const src = asPhotoUrl(photo);
                       return (
                       <div key={idx} className="relative group">
@@ -2448,7 +2491,7 @@ const handleMainPhoto = (file) => {
                         />
                         {isAdmin && (
                           <button
-                            onClick={() => onDeleteAlbumPhoto(idx)}
+                            onClick={() => onDeleteAlbumPhoto(photo)}
                             className="absolute top-2 right-2 bg-rose-600 text-white rounded-lg px-3 py-2 text-sm opacity-0 group-hover:opacity-100 transition"
                             title="Удалить фото"
                           >
@@ -2482,11 +2525,11 @@ const handleMainPhoto = (file) => {
               <div className="text-base bg-slate-50 border rounded-3xl p-5">
                 <div className="text-lg font-bold text-slate-900">Документы</div>
 
-                {(person.documents || []).length === 0 ? (
+                {safeDocs.length === 0 ? (
                   <div className="text-slate-600 mt-2">Пока нет документов.</div>
                 ) : (
                   <div className="mt-3 space-y-2">
-                    {(person.documents || []).map((doc, idx) => {
+                    {safeDocs.map((doc, idx) => {
                       const href = asDocUrl(doc);
                       const name = asDocName(doc, idx);
                       const meta = typeof doc === "object" ? [doc.uploadedBy, doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleString("ru-RU") : "", fmtSize(doc.size)].filter(Boolean).join(" • ") : "";
@@ -2507,7 +2550,7 @@ const handleMainPhoto = (file) => {
                           </div>
                           {isAdmin && (
                             <button
-                              onClick={() => onDeleteDocument(idx)}
+                              onClick={() => onDeleteDocument(doc)}
                               className="bg-rose-600 text-white rounded-xl px-3 py-2 text-sm"
                               title="Удалить документ"
                             >
