@@ -190,12 +190,38 @@
     }
 
     /* Мобильная адаптация */
-    @media (max-width: 640px) {
-      /* Минимальные корректировки только для читаемости */
-      body { 
-        font-size: 16px; 
-        overflow-x: auto;
+    .tree li { min-width: 180px; padding: 18px 4px 0 4px; }
+      .tree ul { padding-top: 18px; }
+      .tree ul ul::before { height: 18px; }
+      .tree li::before, .tree li::after { height: 18px; }
+      
+      .personCard { 
+        max-width: 160px; 
+        padding: 6px 8px; 
+        border-radius: 14px;
+        gap: 6px;
+        flex-direction: column;
+        text-align: center;
       }
+      
+      .personCard .text-left {
+        text-align: center !important;
+      }
+      
+      .avatar { width: 36px; height: 36px; font-size: 14px; }
+      .coupleMid { width: 30px; height: 30px; font-size: 16px; }
+      .coupleRow { gap: 8px; }
+      
+      /* Уменьшаем текст в карточках */
+      .personCard .font-semibold { font-size: 12px; }
+      .personCard .text-xs { font-size: 10px; }
+    }
+
+    .personCard { max-width: 130px; padding: 5px 6px; }
+      .avatar { width: 32px; height: 32px; font-size: 12px; }
+      .coupleMid { width: 26px; height: 26px; font-size: 14px; }
+      .personCard .font-semibold { font-size: 11px; }
+      .personCard .text-xs { font-size: 9px; }
     }
   
     /* === Graph SVG links (like index211), behind cards === */
@@ -226,6 +252,43 @@
     .coupleMid { width: 56px; height: 56px; font-size: 22px; }
     .treeToggleBtn { font-size: 18px !important; padding: 10px 16px !important; }
     .treeActionBtn { font-size: 18px !important; padding: 10px 16px !important; }
+/* === MOBILE: keep desktop "wide" tree layout (no column cards) === */
+@media (max-width: 768px) {
+  body { overflow-x: auto; }
+
+  /* allow horizontal pan like on PC */
+  .tree {
+    overflow-x: auto;
+    overflow-y: visible;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 40px;
+  }
+
+  /* prevent flex rows from wrapping into a vertical column */
+  .tree .flex-wrap { flex-wrap: nowrap !important; }
+
+  /* ensure the inner tree can be wider than the screen */
+  .tree > div { min-width: max-content; }
+
+  /* keep mini-cards in one row; just scale slightly */
+  .personCard {
+    flex-direction: row;
+    text-align: left;
+    transform: scale(0.85);
+    transform-origin: top center;
+    max-width: 560px;
+    padding: 16px 18px;
+    gap: 10px;
+  }
+  .personCard .text-left { text-align: left !important; }
+
+  .avatar { width: 56px; height: 56px; font-size: 18px; }
+  .coupleMid { width: 44px; height: 44px; font-size: 18px; }
+
+  /* header controls: keep readable sizes */
+  header .text-3xl { font-size: 1.6rem; }
+  header button { padding: 10px 14px; font-size: 16px; }
+}
 </style>
 </head>
 
