@@ -579,21 +579,82 @@
       // CRUD: people
       // =========================
       const addPerson = async (data) => {
-        if (!isAdmin) return;
-        const newId = uid();
-        const p = normalizePerson(data);
-        await db.collection("people").doc(newId).set(p);
-        setShowPersonForm(false);
-      };
+  // Только администратор может создавать людей
+  if (!isAdmin) {
+    alert("Только администратор может добавлять людей.");
+    return;
+  }
+  if (!user) {
+    alert("Нужно войти как администратор.");
+    return;
+  }
+
+  const id = data?.id || uid();
+
+  try {
+    let draft = { ...data, id };
+
+    // Если выбрано главное фото (файл) — загрузим в Storage и сохраним URL в Firestore
+    if (draft._mainPhotoFile) {
+      const safeName = ((draft._mainPhotoFile.name) || "avatar").replace(/[^a-zA-Z0-9._-]/g, "_");
+      const path = `people/${id}/avatar/${Date.now()}_${safeName}`;
+      const ref = storage.ref().child(path);
+      await ref.put(draft._mainPhotoFile, { contentType: draft._mainPhotoFile.type || "image/*" });
+      const url = await ref.getDownloadURL();
+      draft.mainPhoto = url;
+    }
+
+    const p = normalizePerson(draft);
+    await db.collection("people").doc(id).set(p, { merge: true });
+    setShowPersonForm(false);
+  } catch (e) {
+    console.error("addPerson failed:", e);
+    alert("Не удалось сохранить: " + (e?.message || String(e)));
+    throw e;
+  }
+};
 
       const updatePerson = async (data) => {
-        if (!isAdmin) return;
-        const p = normalizePerson(data);
-        await db.collection("people").doc(data.id).update(p);
-        setEditingPerson(null);
-        setShowPersonForm(false);
-        setSelectedPersonId(data.id);
-      };
+  // Только администратор может редактировать карточку человека (включая аватар)
+  if (!isAdmin) {
+    alert("Только администратор может редактировать карточку человека.");
+    return;
+  }
+  if (!user) {
+    alert("Нужно войти как администратор.");
+    return;
+  }
+
+  const id = data?.id;
+  if (!id) {
+    alert("Не найден id человека.");
+    return;
+  }
+
+  try {
+    let draft = { ...data };
+
+    if (draft._mainPhotoFile) {
+      const safeName = ((draft._mainPhotoFile.name) || "avatar").replace(/[^a-zA-Z0-9._-]/g, "_");
+      const path = `people/${id}/avatar/${Date.now()}_${safeName}`;
+      const ref = storage.ref().child(path);
+      await ref.put(draft._mainPhotoFile, { contentType: draft._mainPhotoFile.type || "image/*" });
+      const url = await ref.getDownloadURL();
+      draft.mainPhoto = url;
+    }
+
+    const p = normalizePerson(draft);
+    await db.collection("people").doc(id).set(p, { merge: true });
+
+    setEditingPerson(null);
+    setShowPersonForm(false);
+    setSelectedPersonId(id);
+  } catch (e) {
+    console.error("updatePerson failed:", e);
+    alert("Не удалось сохранить: " + (e?.message || String(e)));
+    throw e;
+  }
+};
 
       const deletePerson = async (personId) => {
         if (!isAdmin) return;
@@ -702,8 +763,8 @@
   }
 
   // Проверка размера (макс 5MB)
-  if (typeof file.size === "number" && file.size > 5 * 1024 * 1024) {
-    alert("Файл слишком большой (максимум 5 МБ)");
+  if (typeof file.size === "number" && file.size > 30 * 1024 * 1024) {
+    alert("Файл слишком большой (максимум 30 МБ)");
     return;
   }
 
@@ -802,9 +863,9 @@
     return;
   }
 
-  // Ограничение размера (макс 15MB)
-  if (typeof file.size === "number" && file.size > 15 * 1024 * 1024) {
-    alert("Файл слишком большой (максимум 15 МБ)");
+  // Ограничение размера (макс 30MB)
+  if (typeof file.size === "number" && file.size > 130 * 1024 * 1024) {
+    alert("Файл слишком большой (максимум 30 МБ)");
     return;
   }
 
@@ -1982,19 +2043,24 @@ function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, on
         photos: []
       });
 
-      const handleMainPhoto = (file) => {
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const dataUrl = String(reader.result || "");
-          setForm(prev => ({
-            ...prev,
-            mainPhoto: dataUrl,
-            photos: prev.photos?.length ? prev.photos : (dataUrl ? [dataUrl] : [])
-          }));
-        };
-        reader.readAsDataURL(file);
-      };
+      const [mainPhotoFile, setMainPhotoFile] = useState(null);
+const [mainPhotoPreview, setMainPhotoPreview] = useState(person?.mainPhoto || "");
+
+const handleMainPhoto = (file) => {
+  if (!file) return;
+
+  // держим файл для загрузки в Firebase Storage при сохранении
+  setMainPhotoFile(file);
+
+  // превью в UI, не сохраняем base64 в Firestore
+  try {
+    const url = URL.createObjectURL(file);
+    setMainPhotoPreview(url);
+  } catch (e) {
+    // fallback: ничего
+  }
+};
+
 
       const [saving, setSaving] = useState(false);
 
@@ -2004,30 +2070,29 @@ function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, on
           return;
         }
         try {
-          setSaving(true);
-          // Если сохранение по сети «подвиснет», модалка не должна зависать бесконечно.
-          // Ждём максимум 8 секунд: либо успех, либо мягкий таймаут.
-          const savePromise = Promise.resolve().then(() => onSave(form));
-          const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error("timeout")), 8000)
-          );
+  setSaving(true);
 
-          await Promise.race([savePromise, timeoutPromise]);
+  const payload = { ...form, _mainPhotoFile: mainPhotoFile };
 
-          // ✅ После успешного сохранения закрываем модалку
-          onClose();
-        } catch (e) {
-          console.error("Save person failed:", e);
-          if (String(e?.message || "").toLowerCase().includes("timeout")) {
-            // Закрываем, чтобы UI не зависал, а сохранение может догрузиться позже.
-            onClose();
-            alert("Сохранение идёт дольше обычного. Если данные не появились — обнови страницу через минуту.");
-          } else {
-            alert("Ошибка сохранения: " + (e?.message || String(e)));
-          }
-        } finally {
-          setSaving(false);
-        }
+  // ждём сохранение максимум 15 секунд, но НЕ закрываем модалку при таймауте
+  const savePromise = Promise.resolve().then(() => onSave(payload));
+  const timeoutPromise = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error("timeout")), 15000)
+  );
+
+  await Promise.race([savePromise, timeoutPromise]);
+
+  onClose();
+} catch (e) {
+  console.error("Save person failed:", e);
+  if (String(e?.message || "").toLowerCase().includes("timeout")) {
+    alert("Сохранение занимает слишком много времени. Проверь интернет и попробуй ещё раз.");
+  } else {
+    alert("Ошибка сохранения: " + (e?.message || String(e)));
+  }
+} finally {
+  setSaving(false);
+}
       };
 
       return (
@@ -2070,11 +2135,11 @@ function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, on
 
             <Field label="Главное фото" className="md:col-span-2">
               <input type="file" accept="image/*" className="w-full border rounded-xl px-3 py-2" onChange={(e) => handleMainPhoto(e.target.files?.[0])} />
-              {form.mainPhoto && (
-                <img src={form.mainPhoto} className="mt-2 w-28 h-28 rounded-xl object-cover border" alt="preview" />
+              {(mainPhotoPreview || form.mainPhoto) && (
+                <img src={mainPhotoPreview || form.mainPhoto} className="mt-2 w-28 h-28 rounded-xl object-cover border" alt="preview" />
               )}
               <div className="text-sm text-slate-600 mt-2">
-                Фото сохраняется как base64 в Firestore. Для большого альбома лучше Firebase Storage.
+                Фото сохраняется в Firebase Storage, а в базе хранится ссылка.
               </div>
             </Field>
           </div>
