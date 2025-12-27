@@ -17,6 +17,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
 
   <style>
     /* Дерево */
@@ -256,56 +257,6 @@
     .coupleMid { width: 56px; height: 56px; font-size: 22px; }
     .treeToggleBtn { font-size: 18px !important; padding: 10px 16px !important; }
     .treeActionBtn { font-size: 18px !important; padding: 10px 16px !important; }
-
-
-/* =========================================================
-   MOBILE WIDE TREE (ONLY MOBILE BEHAVIOR CHANGE)
-   Goal: keep desktop-like "wide" layout on phones + horizontal swipe.
-   ========================================================= */
-@media (max-width: 768px) {
-  /* allow horizontal swipe */
-  body { overflow-x: auto !important; }
-
-  /* tree becomes a wide canvas */
-  .tree {
-    overflow-x: auto !important;
-    overflow-y: visible !important;
-    -webkit-overflow-scrolling: touch;
-    padding-bottom: 48px;
-  }
-
-  /* keep rows in a single line (no wrapping into a column) */
-  .tree .flex.flex-wrap { flex-wrap: nowrap !important; }
-
-  /* make the inner tree content take its natural width */
-  .tree > .w-full,
-  .tree > div,
-  .tree .w-full.flex.flex-col.items-center {
-    min-width: max-content !important;
-  }
-
-  /* Undo the "stacked" mobile card layout */
-  .personCard {
-    flex-direction: row !important;
-    text-align: left !important;
-    max-width: 560px !important;
-    gap: 10px !important;
-  }
-  .personCard .text-left { text-align: left !important; }
-
-  /* Slightly scale down on mobile, but keep proportions */
-  .personCard { transform: scale(0.88); transform-origin: top center; }
-  .avatar { width: 60px !important; height: 60px !important; font-size: 20px !important; }
-  .coupleMid { width: 46px !important; height: 46px !important; font-size: 20px !important; }
-
-  /* Make the generation gaps a bit tighter on small screens */
-  .tree .gap-20 { gap: 56px !important; }
-  .tree .gap-16 { gap: 40px !important; }
-
-  /* Optional: keep header readable without shrinking everything */
-  header .w-full { padding-left: 16px !important; padding-right: 16px !important; }
-}
-
 </style>
 </head>
 
@@ -330,6 +281,7 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
     const auth = firebase.auth();
+    const storage = firebase.storage();
 
     // =========================
     // utils
@@ -706,15 +658,24 @@
       const addPhotoToAlbum = async (personId, file) => {
         if (!isAdmin || !file) return;
 
-        const reader = new FileReader();
-        reader.onloadend = async () => {
-          const dataUrl = String(reader.result || "");
+        try {
+          // Upload file to Firebase Storage, store only URL in Firestore (prevents 1MB doc limit issues)
+          const safeName = (file.name || "photo").replace(/[^a-zA-Z0-9._-]/g, "_");
+          const path = `albums/${personId}/${Date.now()}_${safeName}`;
+          const ref = storage.ref(path);
+
+          await ref.put(file);
+          const url = await ref.getDownloadURL();
+
           const person = people.find(p => p.id === personId);
-          const nextPhotos = [...(person?.photos || []), dataUrl];
+          const nextPhotos = [...(person?.photos || []), url];
+
           await db.collection("people").doc(personId).update({ photos: nextPhotos });
           setSelectedPersonId(personId);
-        };
-        reader.readAsDataURL(file);
+        } catch (e) {
+          console.error("Photo upload error:", e);
+          alert("Ошибка загрузки фото: " + (e?.message || e));
+        }
       };
 
       const deleteAlbumPhoto = async (personId, index) => {
@@ -1812,18 +1773,26 @@ function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, on
         photos: []
       });
 
-      const handleMainPhoto = (file) => {
+      const handleMainPhoto = async (file) => {
         if (!file) return;
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const dataUrl = String(reader.result || "");
+        try {
+          // Upload main photo to Firebase Storage, store URL in Firestore
+          const safeName = (file.name || "main").replace(/[^a-zA-Z0-9._-]/g, "_");
+          const path = `mainPhotos/${form.id}/${Date.now()}_${safeName}`;
+          const ref = storage.ref(path);
+
+          await ref.put(file);
+          const url = await ref.getDownloadURL();
+
           setForm(prev => ({
             ...prev,
-            mainPhoto: dataUrl,
-            photos: prev.photos?.length ? prev.photos : (dataUrl ? [dataUrl] : [])
+            mainPhoto: url,
+            photos: prev.photos?.length ? (prev.photos.includes(url) ? prev.photos : [url, ...prev.photos]) : (url ? [url] : [])
           }));
-        };
-        reader.readAsDataURL(file);
+        } catch (e) {
+          console.error("Main photo upload error:", e);
+          alert("Ошибка загрузки фото: " + (e?.message || e));
+        }
       };
 
       const submit = () => {
@@ -1878,7 +1847,7 @@ function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, on
                 <img src={form.mainPhoto} className="mt-2 w-28 h-28 rounded-xl object-cover border" alt="preview" />
               )}
               <div className="text-sm text-slate-600 mt-2">
-                Фото сохраняется как base64 в Firestore. Для большого альбома лучше Firebase Storage.
+                Фото загружается в Firebase Storage, а в Firestore сохраняется ссылка. Так альбом не «пропадает» из-за лимита 1MB на документ.
               </div>
             </Field>
           </div>
