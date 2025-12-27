@@ -259,20 +259,8 @@
     .treeActionBtn { font-size: 18px !important; padding: 10px 16px !important; }
 
 /* === FIX: single scrollbar in person modal === */
-.modal-overlay {
-  overflow: hidden !important;
-}
-
-.person-card {
-  max-height: 90vh;
-  overflow-y: auto !important;
-  overflow-x: hidden;
-}
-
-/* prevent inner blocks from creating extra scrollbars */
-.person-card * {
-  overflow-x: hidden;
-}
+.modal-overlay { overflow: hidden !important; }
+.modal-content { overflow-y: auto !important; max-height: 92vh; }
 
 </style>
 </head>
@@ -2439,7 +2427,7 @@ const handleMainPhoto = (file) => {
                 </div>
               )}
             </div>
-<div className="space-y-6 max-h-[72vh] overflow-y-auto pr-1">
+<div className="space-y-6 pr-1">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 {person.birthDate && (
                   <div className="text-base bg-slate-50 border rounded-3xl p-5">
@@ -2661,7 +2649,7 @@ const handleMainPhoto = (file) => {
             Выбери пары, с которых начинается дерево. Это убирает «связи» между неродственными верхними ветками.
           </div>
 
-          <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
+          <div className="space-y-3 pr-1">
             {couples.length === 0 ? (
               <div className="text-slate-600">Пока нет пар.</div>
             ) : (
