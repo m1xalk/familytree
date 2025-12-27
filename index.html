@@ -18,54 +18,13 @@
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
 
-  
   <style>
-    /* =========================
-       Responsive foundations
-       ========================= */
-    :root{
-      --fontBase: clamp(15px, 1.6vw, 18px);
-
-      --cardPadY: 16px;
-      --cardPadX: 18px;
-      --cardRadius: 24px;
-      --cardMaxW: min(560px, 92vw);
-      --cardGap: 12px;
-
-      --avatarSize: 72px;
-      --avatarFont: 24px;
-
-      --heartSize: 56px;
-      --heartFont: 22px;
-
-      --rowGap: 16px;
-
-      --tapMinH: 44px;
-    }
-
-    html, body { height: 100%; }
-    body{
-      font-size: var(--fontBase);
-      overflow-x: hidden;
-      -webkit-text-size-adjust: 100%;
-      touch-action: manipulation;
-    }
-
-    /* =========================
-       Tree layout (graph mode)
-       ========================= */
+    /* Дерево */
     .rootTree { padding-top: 0; margin-top: 0; }
-    .tree{
-      position: relative;
-      padding: 16px;
-      overflow: auto;                 /* mobile pan/scroll */
-      -webkit-overflow-scrolling: touch;
-      overscroll-behavior: contain;
-      touch-action: pan-x pan-y pinch-zoom;
-      max-width: 100vw;
-    }
-    .tree ul{ padding-top: 24px; position: relative; }
-    .tree li{
+
+    .tree { padding: 16px; overflow: visible; }
+    .tree ul { padding-top: 24px; position: relative; }
+    .tree li {
       float: left;
       text-align: center;
       list-style: none;
@@ -74,29 +33,61 @@
       min-width: 260px;
     }
 
-    /* =========================
-       Cards
-       ========================= */
-    .personCard{
+    .tree li::before,
+    .tree li::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      right: 50%;
+      border-top: 2px solid #000000;
+      width: 50%;
+      height: 24px;
+    }
+    .tree li::after {
+      right: auto;
+      left: 50%;
+      border-left: 2px solid #000000;
+    }
+
+    .tree li:only-child::before,
+    .tree li:only-child::after { display: none; }
+    .tree li:only-child { padding-top: 0; }
+
+    .tree li:first-child::before { border: 0 none; }
+    .tree li:last-child::after { border: 0 none; }
+    .tree li:last-child::before { border-right: 2px solid #000000; border-radius: 0 10px 0 0; }
+    .tree li:first-child::after { border-radius: 10px 0 0 0; }
+
+    .tree ul ul::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 50%;
+      border-left: 2px solid #000000;
+      width: 0;
+      height: 24px;
+    }
+
+    /* Карточки */
+    .personCard {
       display: inline-flex;
       align-items: center;
-      gap: var(--cardGap);
-      padding: var(--cardPadY) var(--cardPadX);
+      gap: 10px;
+      padding: 10px 12px;
       border: 1px solid #e2e8f0;
-      border-radius: var(--cardRadius);
+      border-radius: 18px;
       background: #fff;
       box-shadow: 0 10px 28px rgba(15,23,42,0.08);
-      max-width: var(--cardMaxW);
+      max-width: 340px;
       cursor: pointer;
       user-select: none;
       transition: transform .15s ease, box-shadow .15s ease;
-      min-height: var(--tapMinH);
     }
-    .personCard:hover{ transform: translateY(-2px); box-shadow: 0 16px 40px rgba(15,23,42,0.12); }
+    .personCard:hover { transform: translateY(-2px); box-shadow: 0 16px 40px rgba(15,23,42,0.12); }
 
-    .avatar{
-      width: var(--avatarSize);
-      height: var(--avatarSize);
+    .avatar {
+      width: 46px;
+      height: 46px;
       border-radius: 999px;
       object-fit: cover;
       background: linear-gradient(135deg, #4f46e5, #9333ea);
@@ -107,49 +98,60 @@
       color: #fff;
       flex: 0 0 auto;
       overflow: hidden;
-      font-size: var(--avatarFont);
       box-shadow: 0 10px 25px rgba(79,70,229,0.25);
     }
 
-    /* Couple row */
-    .coupleContainer{ display: inline-block; position: relative; }
-    .coupleRow{
-      display: inline-flex;
-      align-items: center;
-      gap: var(--rowGap);
+    /* Новая структура для пары на одной линии */
+    .coupleContainer {
+      display: inline-block;
+      position: relative;
+    }
+
+    .coupleRow { 
+      display: inline-flex; 
+      align-items: center; 
+      gap: 16px; 
       position: relative;
       padding-bottom: 12px;
     }
-    .coupleMid{
-      width: var(--heartSize);
-      height: var(--heartSize);
-      border-radius: 999px;
-      border: 2px solid #e2e8f0;
-      background: #fff;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      font-size: var(--heartFont);
-      box-shadow: 0 8px 20px rgba(15,23,42,0.10);
-      cursor: pointer;
-      user-select: none;
-      transition: transform .15s ease, box-shadow .15s ease, opacity .15s ease;
-      flex-shrink: 0;
-      position: relative;
-      z-index: 30; /* above svg links */
-      pointer-events: auto;
-      min-width: var(--tapMinH);
-      min-height: var(--tapMinH);
+    
+    /* Линия вниз от центра пары к детям */
+    .coupleRow::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      bottom: 0;
+      transform: translateX(-50%);
+      width: 2px;
+      height: 12px;
+      background: #000000;
     }
-    .coupleMid:not([aria-disabled="true"]):hover{ transform: scale(1.08); box-shadow: 0 12px 26px rgba(15,23,42,0.16); }
-    .coupleMid[aria-disabled="true"]{ cursor: default; opacity: 0.55; }
 
+    /* Для пары ребенка - линия идет от сердечка */
+    .coupleRowChild {
+      display: inline-flex; 
+      align-items: center; 
+      gap: 16px; 
+      position: relative;
+      padding-bottom: 12px;
+    }
+
+    .coupleRowChild::after {
+      content: "";
+      position: absolute;
+      left: 19px; /* Центр сердечка (38px / 2) */
+      bottom: 0;
+      width: 2px;
+      height: 12px;
+      background: #000000;
+    }
+    /* Якорь: линия от родителей к карточке ребёнка (а не к сердечку) */
     .coupleRowAnchored{
       display: inline-flex;
       align-items: center;
-      gap: var(--rowGap);
+      gap: 16px;
       position: relative;
-      padding-top: 22px;
+      padding-top: 22px; /* место для верхнего «перевода» линии */
       padding-bottom: 12px;
     }
     .coupleRowAnchored .anchorOverlay{
@@ -160,135 +162,101 @@
       pointer-events:none;
     }
 
-    .clearfix::after{ content:""; display: table; clear: both; }
 
-    /* =========================
-       SVG links (behind cards)
-       ========================= */
-    .treeLinksSvg{
-      pointer-events: none !important;
-      position: absolute;
-      left: 0; top: 0;
-      width: 8000px;  /* cover large scroll areas */
-      height: 8000px; /* cover large scroll areas */
-      overflow: visible;
-      z-index: 0;
+    .coupleMid {
+      width: 38px; height: 38px; border-radius: 999px;
+      border: 2px solid #e2e8f0; background: #fff;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 18px;
+      box-shadow: 0 8px 20px rgba(15,23,42,0.10);
+      cursor: pointer;
+      user-select: none;
+      transition: transform .15s ease, box-shadow .15s ease, opacity .15s ease;
+      flex-shrink: 0;
     }
-    .coupleContainer, .personCard, .tree li{ position: relative; z-index: 10; }
+    .coupleMid:not([aria-disabled="true"]):hover { transform: scale(1.08); box-shadow: 0 12px 26px rgba(15,23,42,0.16); }
+    .coupleMid[aria-disabled="true"] { cursor: default; opacity: 0.55; }
 
-    /* Hide old CSS connectors (kept for legacy) */
+    .clearfix::after { content: ""; display: table; clear: both; }
+
+    /* Модалки */
+    .modal-overlay { animation: fadeIn .18s ease-out; }
+    .modal-content { animation: slideUp .22s ease-out; }
+
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(18px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Мобильная адаптация */
+    @media (max-width: 640px) {
+      .tree { padding: 8px; }
+      .tree li { min-width: 180px; padding: 18px 4px 0 4px; }
+      .tree ul { padding-top: 18px; }
+      .tree ul ul::before { height: 18px; }
+      .tree li::before, .tree li::after { height: 18px; }
+      
+      .personCard { 
+        max-width: 160px; 
+        padding: 6px 8px; 
+        border-radius: 14px;
+        gap: 6px;
+        flex-direction: column;
+        text-align: center;
+      }
+      
+      .personCard .text-left {
+        text-align: center !important;
+      }
+      
+      .avatar { width: 36px; height: 36px; font-size: 14px; }
+      .coupleMid { width: 30px; height: 30px; font-size: 16px; }
+      .coupleRow { gap: 8px; }
+      
+      /* Уменьшаем текст в карточках */
+      .personCard .font-semibold { font-size: 12px; }
+      .personCard .text-xs { font-size: 10px; }
+    }
+
+    @media (max-width: 480px) {
+      .tree li { min-width: 140px; }
+      .personCard { max-width: 130px; padding: 5px 6px; }
+      .avatar { width: 32px; height: 32px; font-size: 12px; }
+      .coupleMid { width: 26px; height: 26px; font-size: 14px; }
+      .personCard .font-semibold { font-size: 11px; }
+      .personCard .text-xs { font-size: 9px; }
+    }
+  
+    /* === Graph SVG links (like index211), behind cards === */
+    .tree { position: relative; }
+    .treeLinksSvg { pointer-events: none !important;  position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; z-index: 0; }
+    .coupleContainer, .personCard, .tree li { position: relative; z-index: 10; }
+    /* hide old CSS connectors */
     .tree li::before,
     .tree li::after,
     .tree ul ul::before,
     .coupleRow::after,
-    .coupleRowChild::after{
+    .coupleRowChild::after {
       display: none !important;
       content: none !important;
       border: 0 !important;
       background: transparent !important;
     }
 
-    /* =========================
-       Modals: smoother on mobile
-       ========================= */
-    .modal-overlay { animation: fadeIn .18s ease-out; }
-    .modal-content { animation: slideUp .22s ease-out; }
-    @keyframes fadeIn{ from { opacity: 0; } to { opacity: 1; } }
-    @keyframes slideUp{ from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
+  
+    /* Ensure the heart (coupleMid) stays clickable above lines/cards */
+    .coupleMid{ position: relative; z-index: 30; cursor: pointer; pointer-events: auto; }
 
-    
-    /* =========================
-       Tree viewport / zoom (keeps PC-like layout on mobile)
-       ========================= */
-    .treeViewport{
-      position: relative;
-      width: 100%;
-      height: calc(100vh - 88px); /* header approx; safe even if slightly off */
-      overflow: auto;
-      -webkit-overflow-scrolling: touch;
-      touch-action: pan-x pan-y pinch-zoom;
-    }
-    .treeStage{
-      transform-origin: 0 0;
-      will-change: transform;
-      width: max-content;
-      margin: 0 auto;
-    }
-    .treeControls{
-      position: absolute;
-      right: 14px;
-      bottom: 14px;
-      margin-left: auto;
-      width: fit-content;
-      display: flex;
-      gap: 10px;
-      padding: 8px;
-      border-radius: 16px;
-      background: rgba(255,255,255,0.9);
-      box-shadow: 0 10px 26px rgba(0,0,0,0.12);
-      backdrop-filter: blur(8px);
-    }
-    .ctrlBtn{
-      width: 52px;
-      height: 52px;
-      border-radius: 14px;
-      border: 1px solid rgba(15,23,42,0.12);
-      background: white;
-      font-size: 22px;
-      line-height: 1;
-      font-weight: 700;
-      color: #0f172a;
-      display: grid;
-      place-items: center;
-      cursor: pointer;
-      user-select: none;
-    }
-    .ctrlBtn:active{ transform: translateY(1px); }
-
-/* =========================
-       Mobile (comfort-first)
-       ========================= */
-    @media (max-width: 640px){
-      :root{
-        --cardPadY: 12px;
-        --cardPadX: 12px;
-        --cardRadius: 18px;
-        --cardMaxW: 380px;  /* keep card readable; use zoom/pan to navigate */  /* two cards per row in couple */
-        --cardGap: 8px;
-
-        --avatarSize: 52px;
-        --avatarFont: 16px;
-
-        --heartSize: 46px;
-        --heartFont: 18px;
-
-        --rowGap: 10px;
-      }
-
-      .tree{ padding: 10px; }
-      .personCard{
-        flex-direction: column;
-        text-align: center;
-      }
-      .personCard .text-left{ text-align: center !important; }
-
-      /* Make header/toolbars fit and tappable */
-      header .w-full{ padding-left: 16px !important; padding-right: 16px !important; }
-      header .w-14.h-14{ width: 52px !important; height: 52px !important; }
-    }
-
-    @media (max-width: 420px){
-      :root{
-        --cardMaxW: 360px;
-        --avatarSize: 48px;
-        --heartSize: 42px;
-      }
-    }
-
-    /* Reduce accidental iOS overscroll glow in nested scrolls */
-    .tree:focus{ outline: none; }
-  </style>
-
+  
+    /* UI scale-up (requested) */
+    body { font-size: 18px; overflow-x: hidden; }
+    .personCard { padding: 18px 20px; border-radius: 24px; max-width: 560px; }
+    .avatar { width: 72px; height: 72px; font-size: 24px; }
+    .coupleMid { width: 56px; height: 56px; font-size: 22px; }
+    .treeToggleBtn { font-size: 18px !important; padding: 10px 16px !important; }
+    .treeActionBtn { font-size: 18px !important; padding: 10px 16px !important; }
+</style>
 </head>
 
 <body class="bg-gradient-to-br from-slate-50 to-slate-100">
@@ -889,37 +857,11 @@
         return { rows, personLevel, coupleLevel, allowedCoupleIds, allowedPersonIds };
       }, [people, couples, rootCouples, couplesByPerson, expandedCouples]);
 
-      // coords for SVG links + viewport scaling (mobile friendly)
-      const viewportRef = useRef(null);       // scroll container
-      const treeWrapRef = useRef(null);       // scaled stage (reference frame for link coords)
+      // coords for SVG links
+      const treeWrapRef = useRef(null);
       const [linkCoords, setLinkCoords] = useState({});
 
-      const [zoom, setZoom] = useState(1);
-
-      const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
-
-      const fitTreeToViewport = () => {
-        const vp = viewportRef.current;
-        const stage = treeWrapRef.current;
-        if (!vp || !stage) return;
-
-        // stage.scrollWidth/Height are the "natural" size (not affected by CSS transforms)
-        const pad = 24;
-        const vw = Math.max(1, vp.clientWidth - pad);
-        const vh = Math.max(1, vp.clientHeight - pad);
-        const sw = Math.max(1, stage.scrollWidth);
-        const sh = Math.max(1, stage.scrollHeight);
-
-        const k = clamp(Math.min(vw / sw, vh / sh, 1), 0.35, 1);
-        setZoom(k);
-
-        // center-ish after zoom
-        requestAnimationFrame(() => {
-          vp.scrollLeft = Math.max(0, (sw * k - vp.clientWidth) / 2);
-          vp.scrollTop = Math.max(0, (sh * k - vp.clientHeight) / 2);
-        });
-      };
-const updateLinkCoords = () => {
+      const updateLinkCoords = () => {
         const wrap = treeWrapRef.current;
         if (!wrap) return;
         const rect = wrap.getBoundingClientRect();
@@ -944,9 +886,7 @@ const updateLinkCoords = () => {
         if (viewMode !== "tree") return;
         updateLinkCoords();
 
-        
-        if (window.innerWidth <= 768) fitTreeToViewport();
-let ro = null;
+        let ro = null;
         const wrap = treeWrapRef.current;
 
         const onResize = () => updateLinkCoords();
@@ -964,12 +904,6 @@ let ro = null;
           if (ro) ro.disconnect();
         };
       }, [viewMode, people, couples, graphLevels]);
-      useLayoutEffect(() => {
-        if (viewMode !== "tree") return;
-        updateLinkCoords();
-      }, [zoom, viewMode]);
-
-
 
       // =========================
       // UI states
@@ -1219,7 +1153,7 @@ let ro = null;
                   Есть люди, но нет пар. {isAdmin && "Добавь пару, чтобы построить дерево."}
                 </div>
               ) : (
-                <div ref={viewportRef} className="treeViewport"><div ref={treeWrapRef} className="tree py-8 treeStage" style={{ transform: `scale(${zoom})` }}>
+                <div ref={treeWrapRef} className="tree py-8">
                 <svg className="treeLinksSvg">
                   {couples.map(c => (c.childrenIds || []).map(childId => {
                     if (!graphLevels.allowedCoupleIds?.has(c.id)) return null;
@@ -1246,7 +1180,7 @@ let ro = null;
 
                 <div className="w-full flex flex-col items-center gap-20">
                   {graphLevels.rows.map((row, idx) => (
-                    <div key={idx} className="flex flex-nowrap gap-16 justify-center items-start px-6 min-w-max">
+                    <div key={idx} className="flex flex-wrap gap-16 justify-center items-start px-6">
                       {row.couples.map(cp => (
                         <div key={cp.id} className="coupleContainer" data-couple-anchor={cp.id}>
                           <div className="coupleRow">
@@ -1311,13 +1245,6 @@ let ro = null;
                   ))}
                 </div>
               </div>
-                <div className="treeControls">
-                  <button className="ctrlBtn" onClick={() => setZoom(z => clamp(z - 0.1, 0.35, 1.6))}>−</button>
-                  <button className="ctrlBtn" onClick={fitTreeToViewport}>↔</button>
-                  <button className="ctrlBtn" onClick={() => setZoom(z => clamp(z + 0.1, 0.35, 1.6))}>+</button>
-                </div>
-              </div>
-
               )}
             </section>
 
