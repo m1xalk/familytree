@@ -257,6 +257,23 @@
     .coupleMid { width: 56px; height: 56px; font-size: 22px; }
     .treeToggleBtn { font-size: 18px !important; padding: 10px 16px !important; }
     .treeActionBtn { font-size: 18px !important; padding: 10px 16px !important; }
+
+/* === FIX: single scrollbar in person modal === */
+.modal-overlay {
+  overflow: hidden !important;
+}
+
+.person-card {
+  max-height: 90vh;
+  overflow-y: auto !important;
+  overflow-x: hidden;
+}
+
+/* prevent inner blocks from creating extra scrollbars */
+.person-card * {
+  overflow-x: hidden;
+}
+
 </style>
 </head>
 
