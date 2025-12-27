@@ -873,26 +873,6 @@
   }
 };
 
-          await db.collection("people").doc(personId).set(
-            { documents: firebase.firestore.FieldValue.arrayUnion(docObj) },
-            { merge: true }
-          );
-
-          setSelectedPersonId(personId);
-          alert("Документ успешно загружен!");
-        } catch (err) {
-          console.error("Ошибка загрузки документа:", err);
-          const code = err?.code;
-          let msg = "Не удалось загрузить документ: ";
-          if (code === "storage/unauthorized") msg += "Нет прав доступа к Storage.";
-          else msg += (err?.message || String(err));
-          alert(msg);
-        }
-
-      };
-
-
-
       const deletePersonDocument = async (personId, index) => {
         if (!isAdmin) return;
         const person = people.find(p => p.id === personId);
@@ -2016,12 +1996,38 @@ function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, on
         reader.readAsDataURL(file);
       };
 
-      const submit = () => {
+      const [saving, setSaving] = useState(false);
+
+      const submit = async () => {
         if (!safeText(form.lastName) || !safeText(form.firstName)) {
           alert("Имя и фамилия обязательны");
           return;
         }
-        onSave(form);
+        try {
+          setSaving(true);
+          // Если сохранение по сети «подвиснет», модалка не должна зависать бесконечно.
+          // Ждём максимум 8 секунд: либо успех, либо мягкий таймаут.
+          const savePromise = Promise.resolve().then(() => onSave(form));
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("timeout")), 8000)
+          );
+
+          await Promise.race([savePromise, timeoutPromise]);
+
+          // ✅ После успешного сохранения закрываем модалку
+          onClose();
+        } catch (e) {
+          console.error("Save person failed:", e);
+          if (String(e?.message || "").toLowerCase().includes("timeout")) {
+            // Закрываем, чтобы UI не зависал, а сохранение может догрузиться позже.
+            onClose();
+            alert("Сохранение идёт дольше обычного. Если данные не появились — обнови страницу через минуту.");
+          } else {
+            alert("Ошибка сохранения: " + (e?.message || String(e)));
+          }
+        } finally {
+          setSaving(false);
+        }
       };
 
       return (
@@ -2074,7 +2080,7 @@ function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, on
           </div>
 
           <div className="mt-4 flex gap-2">
-            <button onClick={submit} className="flex-1 px-3 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700">Сохранить</button>
+            <button type="button" disabled={saving} onClick={submit} className={"flex-1 px-3 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 " + (saving ? "opacity-70 cursor-not-allowed" : "")}>{saving ? "Сохранение…" : "Сохранить"}</button>
             <button onClick={onClose} className="flex-1 px-4 py-3 rounded-2xl bg-slate-200 text-slate-800 hover:bg-slate-300 text-lg font-semibold">Отмена</button>
           </div>
         </Modal>
@@ -2576,8 +2582,46 @@ function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, on
 
 
         // render
-    const root = ReactDOM.createRoot(document.getElementById("root"));
-    root.render(<App />);
+	class ErrorBoundary extends React.Component {
+	  constructor(props) {
+	    super(props);
+	    this.state = { hasError: false, error: null };
+	  }
+	  static getDerivedStateFromError(error) {
+	    return { hasError: true, error };
+	  }
+	  componentDidCatch(error, info) {
+	    console.error("UI crashed:", error, info);
+	  }
+	  render() {
+	    if (this.state.hasError) {
+	      return (
+	        <div className="min-h-screen flex items-center justify-center p-6 bg-slate-50">
+	          <div className="max-w-xl w-full bg-white border rounded-3xl p-6 shadow">
+	            <div className="text-xl font-extrabold text-slate-900">Произошла ошибка на странице</div>
+	            <div className="text-slate-600 mt-2">Обычно это одна строка в коде или неожиданные данные (например, фото/документ).</div>
+	            <div className="mt-4 text-sm bg-slate-900 text-white rounded-2xl p-4 overflow-auto whitespace-pre-wrap">
+	              {String(this.state.error && this.state.error.message ? this.state.error.message : this.state.error)}
+	            </div>
+	            <div className="mt-4 flex gap-2">
+	              <button onClick={() => location.reload()} className="flex-1 px-4 py-3 rounded-2xl bg-indigo-600 text-white font-semibold">Перезагрузить</button>
+	              <button onClick={() => { this.setState({ hasError: false, error: null }); }} className="flex-1 px-4 py-3 rounded-2xl bg-slate-200 text-slate-800 font-semibold">Попробовать ещё раз</button>
+	            </div>
+	            <div className="text-xs text-slate-500 mt-3">Подсказка: открой DevTools → Console и пришли ошибку, если нужно.</div>
+	          </div>
+	        </div>
+	      );
+	    }
+	    return this.props.children;
+	  }
+	}
+
+	const root = ReactDOM.createRoot(document.getElementById("root"));
+	root.render(
+	  <ErrorBoundary>
+	    <App />
+	  </ErrorBoundary>
+	);
   </script>
 </body>
 </html>
