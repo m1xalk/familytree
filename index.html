@@ -827,16 +827,10 @@
           else msg += (err?.message || String(err));
           alert(msg);
         }
+
       };
-          await db.collection("people").doc(personId).update({
-            documents: firebase.firestore.FieldValue.arrayUnion(docObj)
-          });
-          setSelectedPersonId(personId);
-        } catch (err) {
-          console.error(err);
-          alert("Не удалось загрузить документ: " + (err?.message || err));
-        }
-      };
+
+
 
       const deletePersonDocument = async (personId, index) => {
         if (!isAdmin) return;
