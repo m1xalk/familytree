@@ -656,33 +656,104 @@
       // Photos
       // =========================
       const addPhotoToAlbum = async (personId, file) => {
-        if (!isAdmin || !file) return;
+        if (!user || !file) {
+          alert("Нужно войти как гость или администратор, чтобы добавлять фото.");
+          return;
+        }
+
+        const fileName = (file.name || "photo").replace(/[^a-zA-Z0-9._-]/g, "_");
+        const id = uid();
+        const path = `people/${personId}/photos/${id}_${fileName}`;
+        const ref = storage.ref().child(path);
 
         try {
-          // Upload file to Firebase Storage, store only URL in Firestore (prevents 1MB doc limit issues)
-          const safeName = (file.name || "photo").replace(/[^a-zA-Z0-9._-]/g, "_");
-          const path = `albums/${personId}/${Date.now()}_${safeName}`;
-          const ref = storage.ref(path);
-
           await ref.put(file);
           const url = await ref.getDownloadURL();
-
-          const person = people.find(p => p.id === personId);
-          const nextPhotos = [...(person?.photos || []), url];
-
-          await db.collection("people").doc(personId).update({ photos: nextPhotos });
+          const author = isAdmin ? "Администратор" : (user.isAnonymous ? "Гость" : (user.email || "Пользователь"));
+          const photoObj = { id, url, path, uploadedAt: new Date().toISOString(), uploadedBy: author };
+          await db.collection("people").doc(personId).update({
+            photos: firebase.firestore.FieldValue.arrayUnion(photoObj)
+          });
           setSelectedPersonId(personId);
-        } catch (e) {
-          console.error("Photo upload error:", e);
-          alert("Ошибка загрузки фото: " + (e?.message || e));
+        } catch (err) {
+          console.error(err);
+          alert("Не удалось загрузить фото: " + (err?.message || err));
         }
       };
 
       const deleteAlbumPhoto = async (personId, index) => {
         if (!isAdmin) return;
         const person = people.find(p => p.id === personId);
-        const next = (person?.photos || []).filter((_, i) => i !== index);
+        const current = (person?.photos || []);
+        const toDelete = current[index];
+        const next = current.filter((_, i) => i !== index);
+
+        try {
+          if (toDelete && typeof toDelete === "object" && toDelete.path) {
+            await storage.ref().child(toDelete.path).delete();
+          }
+        } catch (err) {
+          // Даже если не удалилось из Storage — всё равно уберём из Firestore (чтобы не «ломать» UI)
+          console.warn("Storage delete failed:", err);
+        }
+
         await db.collection("people").doc(personId).update({ photos: next });
+      };
+
+      // =========================
+      // Documents
+      // =========================
+      const addDocumentToPerson = async (personId, file) => {
+        if (!user || !file) {
+          alert("Нужно войти как гость или администратор, чтобы добавлять документы.");
+          return;
+        }
+
+        const fileName = (file.name || "document").replace(/[^a-zA-Z0-9._-]/g, "_");
+        const id = uid();
+        const path = `people/${personId}/docs/${id}_${fileName}`;
+        const ref = storage.ref().child(path);
+
+        try {
+          await ref.put(file);
+          const url = await ref.getDownloadURL();
+          const author = isAdmin ? "Администратор" : (user.isAnonymous ? "Гость" : (user.email || "Пользователь"));
+          const docObj = {
+            id,
+            name: file.name || "Документ",
+            url,
+            path,
+            type: file.type || "",
+            size: typeof file.size === "number" ? file.size : null,
+            uploadedAt: new Date().toISOString(),
+            uploadedBy: author
+          };
+          await db.collection("people").doc(personId).update({
+            documents: firebase.firestore.FieldValue.arrayUnion(docObj)
+          });
+          setSelectedPersonId(personId);
+        } catch (err) {
+          console.error(err);
+          alert("Не удалось загрузить документ: " + (err?.message || err));
+        }
+      };
+
+      const deletePersonDocument = async (personId, index) => {
+        if (!isAdmin) return;
+        const person = people.find(p => p.id === personId);
+        const current = (person?.documents || []);
+        const toDelete = current[index];
+        const next = current.filter((_, i) => i !== index);
+
+        try {
+          if (toDelete && typeof toDelete === "object" && toDelete.path) {
+            await storage.ref().child(toDelete.path).delete();
+          }
+        } catch (err) {
+          console.warn("Storage delete failed:", err);
+        }
+
+        await db.collection("people").doc(personId).update({ documents: next });
       };
 
       // =========================
@@ -1275,6 +1346,9 @@
                 onAddComment={addComment}
                 onAddAlbumPhoto={(file) => addPhotoToAlbum(selectedPerson.id, file)}
                 onDeleteAlbumPhoto={(idx) => deleteAlbumPhoto(selectedPerson.id, idx)}
+                onAddDocument={(file) => addDocumentToPerson(selectedPerson.id, file)}
+                onDeleteDocument={(idx) => deletePersonDocument(selectedPerson.id, idx)}
+                canContribute={!!user}
               />
             )}
           </main>
@@ -1773,26 +1847,18 @@ function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, on
         photos: []
       });
 
-      const handleMainPhoto = async (file) => {
+      const handleMainPhoto = (file) => {
         if (!file) return;
-        try {
-          // Upload main photo to Firebase Storage, store URL in Firestore
-          const safeName = (file.name || "main").replace(/[^a-zA-Z0-9._-]/g, "_");
-          const path = `mainPhotos/${form.id}/${Date.now()}_${safeName}`;
-          const ref = storage.ref(path);
-
-          await ref.put(file);
-          const url = await ref.getDownloadURL();
-
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const dataUrl = String(reader.result || "");
           setForm(prev => ({
             ...prev,
-            mainPhoto: url,
-            photos: prev.photos?.length ? (prev.photos.includes(url) ? prev.photos : [url, ...prev.photos]) : (url ? [url] : [])
+            mainPhoto: dataUrl,
+            photos: prev.photos?.length ? prev.photos : (dataUrl ? [dataUrl] : [])
           }));
-        } catch (e) {
-          console.error("Main photo upload error:", e);
-          alert("Ошибка загрузки фото: " + (e?.message || e));
-        }
+        };
+        reader.readAsDataURL(file);
       };
 
       const submit = () => {
@@ -1847,7 +1913,7 @@ function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, on
                 <img src={form.mainPhoto} className="mt-2 w-28 h-28 rounded-xl object-cover border" alt="preview" />
               )}
               <div className="text-sm text-slate-600 mt-2">
-                Фото загружается в Firebase Storage, а в Firestore сохраняется ссылка. Так альбом не «пропадает» из-за лимита 1MB на документ.
+                Фото сохраняется как base64 в Firestore. Для большого альбома лучше Firebase Storage.
               </div>
             </Field>
           </div>
@@ -2011,9 +2077,37 @@ function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, on
       couples, people, comments,
       onDeleteComment,
       newComment, setNewComment, onAddComment,
-      onAddAlbumPhoto, onDeleteAlbumPhoto
+      onAddAlbumPhoto, onDeleteAlbumPhoto,
+      onAddDocument, onDeleteDocument,
+      canContribute
     }) {
       const [lightboxSrc, setLightboxSrc] = useState("");
+
+      const albumPhotos = (person?.photos || []).map((ph) => {
+        if (!ph) return null;
+        if (typeof ph === "string") return { url: ph, legacy: true };
+        if (typeof ph === "object" && ph.url) return ph;
+        return null;
+      }).filter(Boolean);
+
+      const personDocs = (person?.documents || []).map((d) => {
+        if (!d) return null;
+        if (typeof d === "string") return { name: d, url: d, legacy: true };
+        if (typeof d === "object" && d.url) return d;
+        return null;
+      }).filter(Boolean);
+
+      const asPhotoUrl = (p) => (typeof p === "string" ? p : (p?.url || ""));
+      const asDocUrl = (d) => (typeof d === "string" ? d : (d?.url || ""));
+      const asDocName = (d, i) => (typeof d === "string" ? `Документ ${i + 1}` : (d?.name || `Документ ${i + 1}`));
+      const fmtSize = (n) => {
+        if (typeof n !== "number" || !isFinite(n)) return "";
+        const kb = 1024;
+        const mb = kb * 1024;
+        if (n >= mb) return (n / mb).toFixed(1) + " MB";
+        if (n >= kb) return Math.round(n / kb) + " KB";
+        return String(n) + " B";
+      };
 
       const personCouples = couples.filter(c => c.partner1Id === person.id || c.partner2Id === person.id);
 
@@ -2108,17 +2202,22 @@ function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, on
                 </div>
               )}
 
-              {(person.photos || []).length > 0 && (
-                <div className="text-base bg-slate-50 border rounded-3xl p-5">
-                  <div className="text-lg font-bold text-slate-900">Альбом</div>
+              <div className="text-base bg-slate-50 border rounded-3xl p-5">
+                <div className="text-lg font-bold text-slate-900">Альбом</div>
+
+                {(person.photos || []).length === 0 ? (
+                  <div className="text-slate-600 mt-2">Пока нет фотографий.</div>
+                ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-4">
-                    {(person.photos || []).map((photo, idx) => (
+                    {(person.photos || []).map((photo, idx) => {
+                      const src = asPhotoUrl(photo);
+                      return (
                       <div key={idx} className="relative group">
                         <img
-                          src={photo}
+                          src={src}
                           className="w-full h-44 object-cover rounded-2xl border bg-white cursor-zoom-in"
                           alt={"Photo " + (idx + 1)}
-                          onClick={() => setLightboxSrc(photo)}
+                          onClick={() => src && setLightboxSrc(src)}
                           title="Открыть на весь экран"
                         />
                         {isAdmin && (
@@ -2131,18 +2230,84 @@ function AnchoredCoupleRow({ child, partner, statusIcon, isAdmin, onAddChild, on
                           </button>
                         )}
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
-                  <div className="text-sm text-slate-600 mt-2">Нажми на фото — откроется на весь экран.</div>
-                </div>
-              )}
+                )}
 
-              {isAdmin && (
-                <div className="text-base bg-slate-50 border rounded-3xl p-5">
-                  <div className="font-semibold text-slate-900 mb-2">Добавить фото в альбом</div>
-                  <input type="file" accept="image/*" className="w-full border rounded-xl px-3 py-2 bg-white" onChange={(e) => onAddAlbumPhoto(e.target.files?.[0])} />
-                </div>
-              )}
+                <div className="text-sm text-slate-600 mt-2">Нажми на фото — откроется на весь экран.</div>
+
+                {(isAdmin || canContribute) && (
+                  <div className="mt-4">
+                    <div className="font-semibold text-slate-900 mb-2">Добавить фото</div>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="w-full border rounded-xl px-3 py-2 bg-white"
+                      onChange={(e) => onAddAlbumPhoto(e.target.files?.[0])}
+                    />
+                    {!isAdmin && (
+                      <div className="text-sm text-slate-500 mt-2">Удалять фото может только администратор.</div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="text-base bg-slate-50 border rounded-3xl p-5">
+                <div className="text-lg font-bold text-slate-900">Документы</div>
+
+                {(person.documents || []).length === 0 ? (
+                  <div className="text-slate-600 mt-2">Пока нет документов.</div>
+                ) : (
+                  <div className="mt-3 space-y-2">
+                    {(person.documents || []).map((doc, idx) => {
+                      const href = asDocUrl(doc);
+                      const name = asDocName(doc, idx);
+                      const meta = typeof doc === "object" ? [doc.uploadedBy, doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleString("ru-RU") : "", fmtSize(doc.size)].filter(Boolean).join(" • ") : "";
+                      return (
+                        <div key={idx} className="bg-white border rounded-2xl p-3 flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <a
+                              href={href || "#"}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-indigo-700 hover:underline font-semibold break-words"
+                              onClick={(e) => { if (!href) e.preventDefault(); }}
+                              title={href ? "Открыть" : ""}
+                            >
+                              {name}
+                            </a>
+                            {meta && <div className="text-sm text-slate-500 mt-1">{meta}</div>}
+                          </div>
+                          {isAdmin && (
+                            <button
+                              onClick={() => onDeleteDocument(idx)}
+                              className="bg-rose-600 text-white rounded-xl px-3 py-2 text-sm"
+                              title="Удалить документ"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {(isAdmin || canContribute) && (
+                  <div className="mt-4">
+                    <div className="font-semibold text-slate-900 mb-2">Добавить документ</div>
+                    <input
+                      type="file"
+                      className="w-full border rounded-xl px-3 py-2 bg-white"
+                      onChange={(e) => onAddDocument(e.target.files?.[0])}
+                    />
+                    {!isAdmin && (
+                      <div className="text-sm text-slate-500 mt-2">Удалять документы может только администратор.</div>
+                    )}
+                  </div>
+                )}
+              </div>
 
               <div className="border-t pt-4">
                 <div className="font-semibold text-slate-900 mb-2">Комментарии ({comments.length})</div>
