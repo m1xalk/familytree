@@ -273,6 +273,8 @@
       apiKey: "AIzaSyDJKvh7T9MJGXHWoA3LsESEXWsQxiIbFd4",
       authDomain: "familytree-ee339.firebaseapp.com",
       projectId: "familytree-ee339",
+      // ВАЖНО: bucket должен совпадать с тем, который выбран в Firebase Console → Storage
+      // (у тебя это gs://familytree-ee339.firebasestorage.app)
       storageBucket: "familytree-ee339.firebasestorage.app",
       messagingSenderId: "986703703890",
       appId: "1:986703703890:web:71ea30a750e7867dd1548b"
@@ -321,6 +323,10 @@
       const [user, setUser] = useState(null);
       const [loading, setLoading] = useState(true);
       const [isAdmin, setIsAdmin] = useState(false);
+
+      // Чтобы гости могли загружать файлы в Storage и читать Firestore без отдельного логина,
+      // используем анонимную авторизацию.
+      const triedAnonRef = useRef(false);
 
 
       const [showLogin, setShowLogin] = useState(false);
@@ -482,6 +488,17 @@
             loadDataFromFirestore();
             setLoading(false);
             return;
+          }
+
+          // Нет пользователя → пробуем зайти анонимно (1 раз), чтобы Storage не возвращал unauthorized
+          if (!triedAnonRef.current) {
+            triedAnonRef.current = true;
+            try {
+              await auth.signInAnonymously();
+              return; // дальше сработает onAuthStateChanged уже с user
+            } catch (e) {
+              console.warn("Anonymous auth failed:", e);
+            }
           }
 
           setIsAdmin(false);
