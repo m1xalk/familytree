@@ -190,83 +190,11 @@
     }
 
     /* Мобильная адаптация */
-  @media (max-width: 640px) {
-      body { font-size: 14px; }
-      
-      .tree-viewport {
-        height: 60vh;
-        border-radius: 12px;
-      }
-      
-      .zoom-controls {
-        bottom: 12px;
-        right: 12px;
-        gap: 6px;
-      }
-      
-      .zoom-btn {
-        width: 44px;
-        height: 44px;
-        font-size: 20px;
-      }
-      
-      .zoom-info {
-        top: 12px;
-        right: 12px;
-        font-size: 11px;
-        padding: 6px 10px;
-      }
-      
-      /* Хедер */
-      header .w-14 { width: 48px; height: 48px; }
-      header .text-3xl { font-size: 20px; }
-      header .text-lg { font-size: 14px; }
-      header button { padding: 8px 12px; font-size: 14px; }
-      
-      /* Контролы */
-      main { padding: 12px; }
-      main button { font-size: 14px; padding: 10px 16px; }
-      
-      /* Поиск */
-      input[type="text"], input[type="email"], input[type="password"] {
-        font-size: 14px;
-        padding: 10px 12px !important;
-      }
-      
-      /* Предупреждение */
-      .tree-mobile-hint {
-        display: block;
-        text-align: center;
-        padding: 10px;
-        background: #dbeafe;
-        border-radius: 12px;
-        margin-bottom: 12px;
-        font-size: 13px;
-        color: #1e40af;
-        line-height: 1.4;
-      }
-    }
-
-    @media (max-width: 480px) {
-      .tree-viewport {
-        height: 55vh;
-      }
-      
-      .zoom-btn {
-        width: 40px;
-        height: 40px;
-        font-size: 18px;
-      }
-    }
-    
-    /* Показываем подсказку только на мобильных */
-    .tree-mobile-hint {
-      display: none;
-    }
-    
     @media (max-width: 640px) {
-      .tree-mobile-hint {
-        display: block;
+      /* Минимальные корректировки только для читаемости */
+      body { 
+        font-size: 16px; 
+        overflow-x: auto;
       }
     }
   
